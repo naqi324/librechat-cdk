@@ -2,11 +2,13 @@ version: 1.1.5
 
 endpoints:
   bedrock:
-    titleModel: "anthropic.claude-3-haiku-20240307-v1:0"
+    titleModel: "anthropic.claude-sonnet-4-20250525-v1:0"
     models:
       default:
+        - "anthropic.claude-sonnet-4-20250525-v1:0"
+        - "anthropic.claude-opus-4-20250514-v1:0"
         - "anthropic.claude-3-5-sonnet-20241022-v2:0"
-        - "anthropic.claude-3-opus-20240229-v1:0"
+        - "anthropic.claude-3-haiku-20240307-v1:0"
         - "amazon.titan-text-premier-v1:0"
 
 fileConfig:
