@@ -1,6 +1,5 @@
 # LibreChat AWS CDK Deployment 🚀
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![AWS CDK](https://img.shields.io/badge/AWS%20CDK-2.150.0-orange)](https://aws.amazon.com/cdk/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
@@ -21,7 +20,6 @@
 - [Security](#-security)
 - [Contributing](#-contributing)
 - [Support](#-support)
-- [License](#-license)
 
 ## ✨ Features
 
@@ -411,10 +409,6 @@ ssh -i your-key.pem ubuntu@INSTANCE-IP
 # Get instance logs
 aws ec2 get-console-output --instance-id INSTANCE-ID
 ```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

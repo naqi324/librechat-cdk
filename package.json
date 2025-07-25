@@ -70,7 +70,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/librechat-cdk.git"
+    "url": "https://github.com/naqi324/librechat-cdk.git"
   },
   "keywords": [
     "aws",
@@ -85,11 +85,10 @@
     "infrastructure-as-code"
   ],
   "author": "Your Organization",
-  "license": "MIT",
   "bugs": {
-    "url": "https://github.com/your-org/librechat-cdk/issues"
+    "url": "https://github.com/naqi324/librechat-cdk/issues"
   },
-  "homepage": "https://github.com/your-org/librechat-cdk#readme",
+  "homepage": "https://github.com/naqi324/librechat-cdk#readme",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
