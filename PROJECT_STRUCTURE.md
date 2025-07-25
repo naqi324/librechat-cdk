@@ -11,21 +11,52 @@ librechat-cdk/
 ├── tsconfig.json                      # TypeScript compiler configuration
 ├── cdk.json                          # CDK app configuration and feature flags
 ├── jest.config.js                    # Jest testing framework configuration
+├── docker-compose.yaml               # Docker compose configuration for local dev
 ├── .gitignore                        # Git ignore patterns
 │
 ├── bin/
 │   └── librechat.ts                  # CDK app entry point - instantiates stack
 │
 ├── lib/
-│   └── librechat-stack.ts            # Main stack definition - all AWS resources
+│   ├── librechat-stack.ts            # Main stack definition - orchestrates constructs
+│   └── constructs/                   # Modular CDK constructs
+│       ├── compute/
+│       │   ├── ec2-deployment.ts     # EC2-based deployment construct
+│       │   └── ecs-deployment.ts     # ECS Fargate deployment construct
+│       ├── database/
+│       │   └── database-construct.ts # RDS PostgreSQL and DocumentDB constructs
+│       ├── monitoring/
+│       │   └── monitoring-construct.ts # CloudWatch alarms and dashboards
+│       ├── network/
+│       │   └── network-construct.ts  # VPC, subnets, and security groups
+│       └── storage/
+│           └── storage-construct.ts  # S3 buckets and EFS configuration
+│
+├── config/
+│   └── deployment-config.ts          # Deployment configuration definitions
+│
+├── lambda/                           # Lambda functions for initialization
+│   ├── init-postgres/
+│   │   └── init_postgres.py          # PostgreSQL initialization with pgvector
+│   └── init-docdb/
+│       └── init_docdb.py             # DocumentDB initialization
+│
+├── docs/                             # Additional documentation
+│   ├── SECURITY.md                   # Security best practices and features
+│   └── TROUBLESHOOTING.md           # Common issues and solutions
 │
 ├── test/
 │   └── librechat-stack.test.ts       # Unit tests for CDK stack
 │
 ├── scripts/                          # Utility scripts for deployment
-│   ├── deploy.sh                     # Interactive deployment wizard
+│   ├── deploy.sh                     # Basic deployment script
+│   ├── deploy-interactive.sh         # Interactive deployment wizard
+│   ├── setup-environment.sh          # Initial environment setup
 │   ├── create-one-click-deploy.sh    # Generate shareable console URL
-│   └── cleanup.sh                    # Remove all AWS resources
+│   ├── cleanup.sh                    # Remove all AWS resources
+│   └── estimate-cost.ts              # TypeScript cost estimation tool
+│
+├── generated/                        # (Generated) Auto-generated files
 │
 └── cdk.out/                          # (Generated) CDK synthesis output
     └── LibreChatStack.template.json  # Generated CloudFormation template
@@ -35,75 +66,116 @@ librechat-cdk/
 
 ### Infrastructure Definition
 
-#### `lib/librechat-stack.ts` (~800 lines)
+#### `lib/librechat-stack.ts`
 
-The heart of the project - defines all AWS resources:
+The main stack orchestrator that:
 
-- **Networking**: VPC with 2 public and 2 private subnets
-- **Compute**: EC2 instance (t3.xlarge) with automated setup
-- **Database**: RDS PostgreSQL 15.7 with pgvector extension
-- **Storage**: S3 bucket with encryption and versioning
-- **Load Balancing**: Application Load Balancer
-- **IAM**: Role with Bedrock and S3 permissions
-- **Monitoring**: CloudWatch alarms for CPU and DB connections
-- **Secrets**: Secrets Manager for database password
+- Determines deployment mode (EC2 vs ECS)
+- Instantiates appropriate constructs
+- Manages cross-construct dependencies
+- Defines stack outputs
 
-Key sections:
+Key features:
+- Supports multiple deployment configurations
+- Handles environment-specific settings
+- Integrates all constructs seamlessly
 
-```typescript
-// VPC Creation (lines ~50-70)
-const vpc = new ec2.Vpc(this, 'LibreChatVPC', {...})
+#### `lib/constructs/` - Modular Architecture
 
-// Database with pgvector (lines ~140-170)
-const database = new rds.DatabaseInstance(this, 'Database', {...})
+##### `network/network-construct.ts`
+- Creates VPC with configurable AZs and subnets
+- Sets up security groups and NACLs
+- Configures VPC endpoints for AWS services
+- Supports both public and private subnet configurations
 
-// EC2 with user data script (lines ~350-450)
-const instance = new ec2.Instance(this, 'LibreChatInstance', {...})
-```
+##### `compute/ec2-deployment.ts`
+- EC2 instance with automated LibreChat setup
+- User data script for Docker installation
+- Auto-recovery and monitoring
+- SSH access configuration
 
-#### `bin/librechat.ts` (~40 lines)
+##### `compute/ecs-deployment.ts`
+- ECS Fargate cluster configuration
+- Task definitions for LibreChat containers
+- Auto-scaling policies
+- Service discovery setup
+
+##### `database/database-construct.ts`
+- RDS PostgreSQL with pgvector extension
+- Optional DocumentDB for MongoDB compatibility
+- Automated backups and snapshots
+- Multi-AZ support for production
+
+##### `storage/storage-construct.ts`
+- S3 buckets with encryption and versioning
+- EFS for shared container storage (ECS mode)
+- Lifecycle policies for cost optimization
+- CORS configuration for web access
+
+##### `monitoring/monitoring-construct.ts`
+- CloudWatch dashboards
+- Custom metrics and alarms
+- SNS notifications
+- Log aggregation
+
+#### `config/deployment-config.ts`
+
+Defines deployment configurations:
+- `minimal-dev`: Basic development setup
+- `standard-dev`: Development with full features
+- `production-ec2`: Production on EC2
+- `production-ecs`: Production on ECS
+- `enterprise`: Full enterprise features
+
+#### `bin/librechat.ts`
 
 CDK application entry point that:
-
-- Imports the LibreChatStack
-- Reads context values for customization
-- Creates the stack with proper environment
-- Applies tags for cost tracking
+- Loads deployment configuration
+- Creates appropriate stack instance
+- Applies environment-specific settings
+- Manages stack dependencies
 
 ### Configuration Files
 
 #### `package.json`
 
+Key scripts for different deployment scenarios:
+
 ```json
 {
   "name": "librechat-cdk",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "scripts": {
+    // Core CDK commands
     "build": "tsc",
-    "watch": "tsc -w",
-    "test": "jest",
-    "cdk": "cdk",
+    "synth": "npm run build && cdk synth",
     "deploy": "npm run build && cdk deploy",
     "destroy": "cdk destroy",
-    "synth": "npm run build && cdk synth",
-    "export-template": "npm run build && cdk synth > cloudformation-template.yaml"
-  },
-  "dependencies": {
-    "aws-cdk-lib": "2.150.0",
-    "constructs": "^10.0.0",
-    "source-map-support": "^0.5.21"
-  },
-  "devDependencies": {
-    "@types/jest": "^29.5.5",
-    "@types/node": "20.8.10",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.1",
-    "aws-cdk": "2.150.0",
-    "ts-node": "^10.9.1",
-    "typescript": "~5.2.2"
+    
+    // Environment-specific deployments
+    "deploy:dev": "npm run build && cdk deploy -c configSource=standard-dev",
+    "deploy:prod": "npm run build && DEPLOYMENT_ENV=production cdk deploy -c configSource=production-ecs",
+    
+    // Utility commands
+    "wizard": "bash scripts/deploy-interactive.sh",
+    "estimate-cost": "ts-node scripts/estimate-cost.ts",
+    "validate": "npm run lint && npm run test && npm run build",
+    
+    // Testing and quality
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write '**/*.{ts,js,json,md}'"
   }
 }
 ```
+
+Enhanced with:
+- Environment-specific deployment commands
+- Interactive deployment wizard
+- Cost estimation tools
+- Code quality tools (ESLint, Prettier)
+- Comprehensive testing setup
 
 #### `cdk.json`
 
@@ -140,63 +212,92 @@ cloudformation-template.yaml
 
 ### Deployment Scripts
 
+#### `scripts/deploy-interactive.sh`
+
+Advanced interactive deployment wizard that:
+- Detects existing deployments
+- Offers deployment mode selection (EC2/ECS)
+- Configures environment-specific settings
+- Validates prerequisites
+- Provides cost estimates
+- Executes deployment with progress tracking
+
 #### `scripts/deploy.sh`
 
-Interactive bash script that:
+Basic deployment script for CI/CD pipelines:
+- Minimal interaction required
+- Parameter-based configuration
+- Suitable for automation
 
-1. Checks for Node.js, AWS CLI, and CDK
-2. Installs dependencies
-3. Builds the TypeScript project
-4. Offers three deployment methods:
-   - Generate CloudFormation template
-   - Deploy via CDK
-   - Deploy via CloudFormation CLI
+#### `scripts/setup-environment.sh`
 
-Key functions:
-
-- `check_prerequisites()` - Validates environment
-- `install_dependencies()` - Runs npm install
-- `generate_template()` - Creates CF template
-- `deploy_cdk()` - Interactive CDK deployment
+Initial environment setup wizard:
+- Checks AWS CLI configuration
+- Validates Bedrock access
+- Creates EC2 key pairs if needed
+- Sets up .env.librechat file
+- Bootstraps CDK environment
 
 #### `scripts/create-one-click-deploy.sh`
 
-Creates a shareable deployment URL:
-
-```bash
-#!/bin/bash
-REGION=${1:-us-east-1}
-# Creates S3 bucket
-# Uploads template
-# Generates console URL
-```
+Creates shareable deployment URLs:
+- Uploads template to S3
+- Generates pre-signed URLs
+- Creates CloudFormation quick-create links
+- Supports parameter pre-population
 
 #### `scripts/cleanup.sh`
 
-Safe resource cleanup:
+Safe and thorough cleanup:
+- Lists all resources to be deleted
+- Confirms deletion with user
+- Removes stacks in dependency order
+- Cleans up S3 buckets
+- Deletes CloudWatch log groups
 
-```bash
-#!/bin/bash
-# Confirms deletion
-# Removes CloudFormation stack
-# Waits for completion
-```
+#### `scripts/estimate-cost.ts`
+
+TypeScript cost estimation tool:
+- Analyzes deployment configuration
+- Provides monthly cost breakdown
+- Compares different deployment modes
+- Suggests optimization strategies
+
+### Lambda Functions
+
+#### `lambda/init-postgres/init_postgres.py`
+
+PostgreSQL initialization function:
+- Installs pgvector extension
+- Creates required schemas
+- Sets up initial tables
+- Configures vector search indexes
+- Handles connection pooling
+
+#### `lambda/init-docdb/init_docdb.py`
+
+DocumentDB initialization function:
+- Creates collections
+- Sets up indexes
+- Configures sharding (if applicable)
+- Initializes replication
 
 ### Test Files
 
 #### `test/librechat-stack.test.ts`
 
-Jest tests that validate:
+Comprehensive Jest tests that validate:
 
-- VPC has correct CIDR and subnets
-- Security groups have proper rules
-- RDS has pgvector parameter group
-- S3 bucket has encryption enabled
-- EC2 instance has correct configuration
-- IAM role has required permissions
-- ALB and target group settings
-- CloudWatch alarms are created
-- Stack outputs are present
+- VPC configuration for all deployment modes
+- Security group rules and network ACLs
+- Database configurations (RDS/DocumentDB)
+- Compute resources (EC2/ECS)
+- Storage configurations (S3/EFS)
+- IAM policies and roles
+- Load balancer configurations
+- Monitoring and alarms
+- Stack outputs and exports
+- Cost tags and metadata
 
 ## 🛠️ Generated Files
 
@@ -226,60 +327,91 @@ librechat-cloudformation.yaml         # From: cdk synth > filename.yaml
 librechat-parameters.json             # Created by deploy.sh
 ```
 
+## 📚 Documentation
+
+### `docs/SECURITY.md`
+
+Comprehensive security guide covering:
+- AWS security best practices
+- Network isolation strategies
+- Encryption implementation
+- Access control patterns
+- Compliance considerations
+- Incident response procedures
+
+### `docs/TROUBLESHOOTING.md`
+
+Troubleshooting guide with:
+- Common deployment issues
+- Performance optimization tips
+- Debugging techniques
+- Log analysis guides
+- Recovery procedures
+- FAQ section
+
 ## 🔧 Common Operations
 
 ### Initial Setup
 
 ```bash
-# Clone and install
-git clone <repository>
-cd librechat-cdk
-npm install
+# Run the setup wizard
+./scripts/setup-environment.sh
 
-# First-time CDK setup
-cdk bootstrap aws://ACCOUNT/REGION
+# Or manual setup
+npm install
+aws configure
+cdk bootstrap
 ```
 
 ### Development
 
 ```bash
-# Compile TypeScript
-npm run build
+# Local development with Docker
+docker-compose up -d
 
-# Run tests
-npm test
+# Run tests with coverage
+npm run test:coverage
 
-# Watch mode for development
-npm run watch
+# Lint and format code
+npm run lint:fix
+npm run format
 
-# Check what will change
-cdk diff
+# Validate everything
+npm run validate
 ```
 
 ### Deployment
 
 ```bash
-# Interactive deployment
-./scripts/deploy.sh
+# Interactive wizard (recommended)
+npm run wizard
 
-# Direct CDK deployment
-cdk deploy --parameters KeyName=my-key
+# Environment-specific deployments
+npm run deploy:dev
+npm run deploy:staging
+npm run deploy:prod
 
-# Generate CloudFormation
-cdk synth > template.yaml
+# Custom configuration
+cdk deploy -c configSource=my-config
+
+# Cost estimation
+npm run estimate-cost production
 ```
 
-### Debugging
+### Monitoring & Debugging
 
 ```bash
-# Validate synthesis
-cdk synth --quiet
+# View stack status
+aws cloudformation describe-stacks --stack-name LibreChatStack
 
-# See construct tree
-cdk synth --no-staging | jq .tree
+# Stream logs
+aws logs tail /aws/librechat --follow
 
-# Check CloudFormation
-cfn-lint librechat-cloudformation.yaml
+# Check ECS services (if using ECS)
+aws ecs list-services --cluster LibreChat-Cluster
+
+# Generate support bundle
+./scripts/create-support-bundle.sh
 ```
 
 ## 📊 Key File Sections
@@ -328,40 +460,55 @@ Three CloudFormation parameters:
 
 ### Design Decisions
 
-1. **Single Stack Approach**
-   - All resources in one stack for simplicity
-   - Easy to deploy and tear down
-   - Clear resource relationships
+1. **Modular Construct Approach**
+   - Separation of concerns with dedicated constructs
+   - Reusable components across different stacks
+   - Easier testing and maintenance
+   - Support for multiple deployment patterns
 
-2. **EC2 vs Containers**
-   - EC2 chosen for simplicity and SSH access
-   - Docker Compose on EC2 for easy updates
-   - Could be adapted for ECS/Fargate
+2. **Dual Deployment Modes**
+   - **EC2 Mode**: Simple, cost-effective, SSH access
+   - **ECS Mode**: Scalable, managed, production-grade
+   - Shared constructs for networking, database, storage
+   - Mode selected via configuration
 
-3. **User Data vs Custom Resource**
-   - User data script for one-time setup
-   - Simpler than Lambda custom resources
-   - Logs available in EC2 console
+3. **Configuration-Driven Deployment**
+   - Pre-defined configurations for common scenarios
+   - Environment variables for runtime settings
+   - CDK context for deployment customization
+   - Support for GitOps workflows
 
-4. **Parameter vs Context**
-   - Parameters for user-specific values (keys, IPs)
-   - Context for deployment options (instance types)
+4. **Lambda for Initialization**
+   - Custom resources for database setup
+   - Idempotent operations
+   - CloudFormation integration
+   - Automatic retry on failure
 
 ### Extension Points
 
-1. **Adding HTTPS**
-   - Add ACM certificate parameter
-   - Modify ALB listener for HTTPS
-   - Update security groups
+1. **Custom Deployment Modes**
+   - Add new compute constructs (e.g., EKS)
+   - Implement in `lib/constructs/compute/`
+   - Update deployment configurations
+   - Maintain interface compatibility
 
-2. **Multi-AZ Database**
-   - Change `multiAz: true` in RDS config
-   - Increases cost but improves availability
+2. **Additional AWS Services**
+   - Cognito for authentication
+   - ElastiCache for session management
+   - API Gateway for REST APIs
+   - EventBridge for event-driven features
 
-3. **Auto Scaling**
-   - Replace single instance with ASG
-   - Add scaling policies
-   - Update ALB target group
+3. **Multi-Region Deployment**
+   - Cross-region replication for RDS
+   - CloudFront for global distribution
+   - Route 53 for geo-routing
+   - S3 cross-region replication
+
+4. **Enterprise Features**
+   - AWS SSO integration
+   - AWS Control Tower compliance
+   - AWS Organizations support
+   - Service Catalog products
 
 ## 🎯 Best Practices
 
@@ -383,6 +530,49 @@ Three CloudFormation parameters:
    - Monitor CloudWatch alarms
    - Regular backup testing
 
+### Additional Configuration Files
+
+#### `docker-compose.yaml`
+
+Local development environment with:
+- LibreChat application container
+- PostgreSQL with pgvector
+- Redis for caching
+- Meilisearch for full-text search
+- Volume mappings for hot-reload
+- Environment variable configuration
+
+## 🚀 Quick Reference
+
+### File Locations
+
+| What | Where |
+|------|-------|
+| Main stack | `lib/librechat-stack.ts` |
+| Network setup | `lib/constructs/network/network-construct.ts` |
+| EC2 deployment | `lib/constructs/compute/ec2-deployment.ts` |
+| ECS deployment | `lib/constructs/compute/ecs-deployment.ts` |
+| Database setup | `lib/constructs/database/database-construct.ts` |
+| Deployment configs | `config/deployment-config.ts` |
+| Interactive deploy | `scripts/deploy-interactive.sh` |
+| Cost estimation | `scripts/estimate-cost.ts` |
+
+### Common Tasks
+
+| Task | Command |
+|------|---------|
+| Deploy development | `npm run deploy:dev` |
+| Deploy production | `npm run deploy:prod` |
+| Interactive wizard | `npm run wizard` |
+| Estimate costs | `npm run estimate-cost` |
+| Run tests | `npm test` |
+| Clean build | `npm run clean` |
+| Update dependencies | `npm run update-deps` |
+
 ---
 
 For deployment instructions, see [README.md](README.md)
+
+For security information, see [docs/SECURITY.md](docs/SECURITY.md)
+
+For troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)

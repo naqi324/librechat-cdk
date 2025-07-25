@@ -1,0 +1,204 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: librechat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: librechat
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB (for compatibility testing)
+  mongodb:
+    image: mongo:7
+    container_name: librechat-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: LibreChat
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init.js
+    ports:
+      - "27017:27017"
+    command: mongod --replSet rs0
+
+  # MongoDB replica set init
+  mongodb-init:
+    image: mongo:7
+    container_name: librechat-mongodb-init
+    depends_on:
+      - mongodb
+    restart: "no"
+    entrypoint: |
+      bash -c '
+        sleep 10
+        mongosh --host mongodb:27017 -u admin -p admin --authenticationDatabase admin --eval "
+          rs.initiate({
+            _id: \"rs0\",
+            members: [{_id: 0, host: \"mongodb:27017\"}]
+          })
+        "
+      '
+
+  # Meilisearch
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: librechat-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: masterKey123
+      MEILI_NO_ANALYTICS: true
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "7700:7700"
+
+  # RAG API
+  rag-api:
+    image: ghcr.io/danny-avila/librechat-rag-api-dev:latest
+    container_name: librechat-rag-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_DB=librechat
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - JWT_SECRET=your-super-secret-jwt
+      - EMBEDDINGS_PROVIDER=mock
+      - EMBEDDINGS_MODEL=mock-embed
+      - CHUNK_SIZE=1500
+      - CHUNK_OVERLAP=200
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./config/rag-config.yaml:/app/config.yaml
+    ports:
+      - "8000:8000"
+
+  # LibreChat
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    container_name: librechat
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      meilisearch:
+        condition: service_started
+      rag-api:
+        condition: service_started
+    environment:
+      # Server Config
+      HOST: 0.0.0.0
+      PORT: 3080
+      
+      # Database - using MongoDB for local dev
+      MONGO_URI: mongodb://admin:admin@mongodb:27017/LibreChat?authSource=admin
+      
+      # PostgreSQL for RAG
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/librechat?sslmode=disable
+      
+      # Search
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_MASTER_KEY: masterKey123
+      
+      # RAG
+      RAG_API_URL: http://rag-api:8000
+      
+      # Security
+      JWT_SECRET: your-super-secret-jwt
+      CREDS_KEY: your-32-char-key-here-for-encryption
+      CREDS_IV: your-16-char-iv
+      
+      # Features
+      ALLOW_REGISTRATION: true
+      ALLOW_SOCIAL_LOGIN: false
+      
+      # Logging
+      DEBUG_LOGGING: true
+      
+      # Mock Bedrock for local dev
+      ENDPOINTS: openAI,assistants,azureOpenAI,bingAI,google,gptPlugins,anthropic
+      
+    volumes:
+      - ./config/librechat.yaml:/app/librechat.yaml
+      - librechat_uploads:/app/client/public/uploads
+      - librechat_logs:/app/api/logs
+    ports:
+      - "3080:3080"
+
+  # LocalStack for AWS services
+  localstack:
+    image: localstack/localstack:latest
+    container_name: librechat-localstack
+    restart: unless-stopped
+    environment:
+      - SERVICES=s3,secretsmanager,ssm,iam,sts,cloudformation
+      - DEBUG=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "4566:4566"
+
+  # Adminer for database management
+  adminer:
+    image: adminer:latest
+    container_name: librechat-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: pepa-linha
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: librechat-nginx
+    restart: unless-stopped
+    depends_on:
+      - librechat
+    volumes:
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  meilisearch_data:
+  librechat_uploads:
+  librechat_logs:
+  localstack_data:
+
+networks:
+  default:
+    name: librechat-network
+    

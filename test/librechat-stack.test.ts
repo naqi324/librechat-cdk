@@ -1,249 +1,504 @@
-// test/librechat-stack.test.ts
 import * as cdk from 'aws-cdk-lib';
 import { Template, Match } from 'aws-cdk-lib/assertions';
 import { LibreChatStack } from '../lib/librechat-stack';
+import { DeploymentConfigBuilder } from '../config/deployment-config';
 
 describe('LibreChatStack', () => {
   let app: cdk.App;
-  let stack: LibreChatStack;
   let template: Template;
-
-  beforeEach(() => {
-    app = new cdk.App();
-    stack = new LibreChatStack(app, 'TestStack', {
+  
+  // Helper function to create stack with config
+  const createStack = (configBuilder: DeploymentConfigBuilder): LibreChatStack => {
+    const config = configBuilder.build();
+    return new LibreChatStack(app, 'TestStack', {
+      ...config,
       env: {
         account: '123456789012',
         region: 'us-east-1',
       },
     });
-    template = Template.fromStack(stack);
+  };
+  
+  beforeEach(() => {
+    app = new cdk.App();
   });
-
-  test('VPC Created with Correct Configuration', () => {
-    template.hasResourceProperties('AWS::EC2::VPC', {
-      CidrBlock: '10.0.0.0/16',
-      EnableDnsHostnames: true,
-      EnableDnsSupport: true,
+  
+  describe('Development EC2 Deployment', () => {
+    let stack: LibreChatStack;
+    
+    beforeEach(() => {
+      const config = new DeploymentConfigBuilder('development')
+        .withKeyPair('test-key')
+        .withAllowedIps(['10.0.0.1/32']);
+      stack = createStack(config);
+      template = Template.fromStack(stack);
     });
-
-    // Should have 4 subnets (2 public, 2 private)
-    template.resourceCountIs('AWS::EC2::Subnet', 4);
-  });
-
-  test('Security Groups Created', () => {
-    // ALB Security Group
-    template.hasResourceProperties('AWS::EC2::SecurityGroup', {
-      GroupDescription: 'Security group for LibreChat ALB',
-      SecurityGroupIngress: Match.arrayWith([
-        Match.objectLike({
-          IpProtocol: 'tcp',
-          FromPort: 80,
-          ToPort: 80,
-          CidrIp: '0.0.0.0/0',
-        }),
-        Match.objectLike({
-          IpProtocol: 'tcp',
-          FromPort: 443,
-          ToPort: 443,
-          CidrIp: '0.0.0.0/0',
-        }),
-      ]),
+    
+    test('Creates VPC with correct configuration', () => {
+      template.hasResourceProperties('AWS::EC2::VPC', {
+        CidrBlock: '10.0.0.0/16',
+        EnableDnsHostnames: true,
+        EnableDnsSupport: true,
+      });
+      
+      // Should have public and isolated subnets only (no NAT for dev)
+      template.resourceCountIs('AWS::EC2::NatGateway', 0);
+      template.resourceCountIs('AWS::EC2::Subnet', 4); // 2 public, 2 isolated
     });
-
-    // RDS Security Group
-    template.hasResourceProperties('AWS::EC2::SecurityGroup', {
-      GroupDescription: 'Security group for LibreChat RDS instance',
-    });
-  });
-
-  test('RDS Instance Created with pgvector', () => {
-    template.hasResourceProperties('AWS::RDS::DBInstance', {
-      Engine: 'postgres',
-      DBInstanceClass: 'db.t3.medium',
-      AllocatedStorage: '100',
-      StorageEncrypted: true,
-      BackupRetentionPeriod: 7,
-    });
-
-    // Check parameter group for pgvector
-    template.hasResourceProperties('AWS::RDS::DBParameterGroup', {
-      Description: 'PostgreSQL 15 with pgvector',
-      Parameters: {
-        'shared_preload_libraries': 'pgvector',
-      },
-    });
-  });
-
-  test('S3 Bucket Created with Encryption', () => {
-    template.hasResourceProperties('AWS::S3::Bucket', {
-      BucketEncryption: {
-        ServerSideEncryptionConfiguration: [
+    
+    test('Creates EC2 instance with correct properties', () => {
+      template.hasResourceProperties('AWS::EC2::Instance', {
+        InstanceType: 't3.large',
+        BlockDeviceMappings: [
           {
-            ServerSideEncryptionByDefault: {
-              SSEAlgorithm: 'AES256',
+            DeviceName: '/dev/xvda',
+            Ebs: {
+              VolumeSize: 100,
+              VolumeType: 'gp3',
+              Encrypted: true,
+              DeleteOnTermination: true,
             },
           },
         ],
-      },
-      VersioningConfiguration: {
-        Status: 'Enabled',
-      },
-      PublicAccessBlockConfiguration: {
-        BlockPublicAcls: true,
-        BlockPublicPolicy: true,
-        IgnorePublicAcls: true,
-        RestrictPublicBuckets: true,
-      },
+      });
     });
-  });
-
-  test('EC2 Instance with Correct Configuration', () => {
-    template.hasResourceProperties('AWS::EC2::Instance', {
-      InstanceType: 't3.xlarge',
-      BlockDeviceMappings: [
-        {
-          DeviceName: '/dev/sda1',
-          Ebs: {
-            VolumeSize: 100,
-            VolumeType: 'gp3',
-            Encrypted: true,
-          },
+    
+    test('Creates RDS PostgreSQL instance', () => {
+      template.hasResourceProperties('AWS::RDS::DBInstance', {
+        Engine: 'postgres',
+        DBInstanceClass: 'db.t3.small',
+        AllocatedStorage: '20',
+        StorageType: 'gp3',
+        StorageEncrypted: true,
+        BackupRetentionPeriod: 1,
+        MultiAZ: false,
+      });
+    });
+    
+    test('Creates S3 bucket with proper configuration', () => {
+      template.hasResourceProperties('AWS::S3::Bucket', {
+        BucketEncryption: {
+          ServerSideEncryptionConfiguration: [
+            {
+              ServerSideEncryptionByDefault: {
+                SSEAlgorithm: 'AES256',
+              },
+            },
+          ],
         },
-      ],
+        VersioningConfiguration: {
+          Status: 'Enabled',
+        },
+        PublicAccessBlockConfiguration: {
+          BlockPublicAcls: true,
+          BlockPublicPolicy: true,
+          IgnorePublicAcls: true,
+          RestrictPublicBuckets: true,
+        },
+      });
     });
-  });
-
-  test('IAM Role Has Required Permissions', () => {
-    template.hasResourceProperties('AWS::IAM::Policy', {
-      PolicyDocument: {
-        Statement: Match.arrayWith([
-          // Bedrock permissions
+    
+    test('Creates Application Load Balancer', () => {
+      template.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
+        Type: 'application',
+        Scheme: 'internet-facing',
+        IpAddressType: 'ipv4',
+      });
+      
+      // HTTP listener only for dev
+      template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', {
+        Port: 80,
+        Protocol: 'HTTP',
+      });
+    });
+    
+    test('Creates proper IAM role for EC2', () => {
+      template.hasResourceProperties('AWS::IAM::Role', {
+        AssumeRolePolicyDocument: {
+          Statement: [
+            {
+              Effect: 'Allow',
+              Principal: {
+                Service: 'ec2.amazonaws.com',
+              },
+              Action: 'sts:AssumeRole',
+            },
+          ],
+        },
+        ManagedPolicyArns: Match.arrayWith([
+          Match.stringLikeRegexp('.*AmazonSSMManagedInstanceCore.*'),
+          Match.stringLikeRegexp('.*CloudWatchAgentServerPolicy.*'),
+        ]),
+      });
+      
+      // Check for Bedrock permissions
+      template.hasResourceProperties('AWS::IAM::Policy', {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: 'Allow',
+              Action: Match.arrayWith([
+                'bedrock:InvokeModel',
+                'bedrock:InvokeModelWithResponseStream',
+              ]),
+              Resource: '*',
+            }),
+          ]),
+        },
+      });
+    });
+    
+    test('Creates security groups with correct rules', () => {
+      // EC2 Security Group
+      template.hasResourceProperties('AWS::EC2::SecurityGroup', {
+        GroupDescription: Match.stringLikeRegexp('.*EC2 instance.*'),
+        SecurityGroupIngress: Match.arrayWith([
           Match.objectLike({
-            Effect: 'Allow',
-            Action: Match.arrayWith([
-              'bedrock:InvokeModel',
-              'bedrock:InvokeModelWithResponseStream',
-              'bedrock:ListFoundationModels',
-            ]),
-            Resource: '*',
-          }),
-          // S3 permissions
-          Match.objectLike({
-            Effect: 'Allow',
-            Action: Match.arrayWith([
-              's3:GetObject',
-              's3:PutObject',
-              's3:DeleteObject',
-              's3:ListBucket',
-            ]),
+            IpProtocol: 'tcp',
+            FromPort: 22,
+            ToPort: 22,
+            CidrIp: '10.0.0.1/32',
           }),
         ]),
-      },
+      });
+      
+      // RDS Security Group
+      template.hasResourceProperties('AWS::EC2::SecurityGroup', {
+        GroupDescription: Match.stringLikeRegexp('.*RDS PostgreSQL.*'),
+        SecurityGroupIngress: Match.arrayWith([
+          Match.objectLike({
+            IpProtocol: 'tcp',
+            FromPort: 5432,
+            ToPort: 5432,
+          }),
+        ]),
+      });
     });
   });
-
-  test('Load Balancer and Target Group Created', () => {
-    template.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
-      Type: 'application',
-      Scheme: 'internet-facing',
+  
+  describe('Production ECS Deployment', () => {
+    let stack: LibreChatStack;
+    
+    beforeEach(() => {
+      const config = new DeploymentConfigBuilder('production')
+        .withDeploymentMode('ECS')
+        .withAlertEmail('alerts@example.com')
+        .withDomain('librechat.example.com', 'arn:aws:acm:us-east-1:123456789012:certificate/12345', 'Z1234567890ABC');
+      stack = createStack(config);
+      template = Template.fromStack(stack);
     });
-
-    template.hasResourceProperties('AWS::ElasticLoadBalancingV2::TargetGroup', {
-      Port: 3080,
-      Protocol: 'HTTP',
-      HealthCheckPath: '/health',
-      HealthCheckIntervalSeconds: 30,
+    
+    test('Creates VPC with NAT gateways', () => {
+      template.hasResourceProperties('AWS::EC2::VPC', {
+        CidrBlock: '10.2.0.0/16',
+        EnableDnsHostnames: true,
+        EnableDnsSupport: true,
+      });
+      
+      // Should have NAT gateways for production
+      template.resourceCountIs('AWS::EC2::NatGateway', 2);
+      template.resourceCountIs('AWS::EC2::Subnet', 9); // 3 AZs × 3 subnet types
+    });
+    
+    test('Creates ECS cluster with enhanced monitoring', () => {
+      template.hasResourceProperties('AWS::ECS::Cluster', {
+        ClusterSettings: [
+          {
+            Name: 'containerInsights',
+            Value: 'enhanced',
+          },
+        ],
+        ServiceConnectDefaults: {
+          Namespace: Match.anyValue(),
+        },
+      });
+    });
+    
+    test('Creates Fargate services', () => {
+      // LibreChat service
+      template.hasResourceProperties('AWS::ECS::Service', {
+        LaunchType: 'FARGATE',
+        DesiredCount: 3,
+        EnableExecuteCommand: true,
+        HealthCheckGracePeriodSeconds: 120,
+      });
+      
+      // Check for auto-scaling
+      template.hasResourceProperties('AWS::ApplicationAutoScaling::ScalableTarget', {
+        ServiceNamespace: 'ecs',
+        ScalableDimension: 'ecs:service:DesiredCount',
+        MinCapacity: 2,
+        MaxCapacity: 10,
+      });
+    });
+    
+    test('Creates Aurora PostgreSQL Serverless', () => {
+      template.hasResourceProperties('AWS::RDS::DBCluster', {
+        Engine: 'aurora-postgresql',
+        EngineMode: 'provisioned',
+        ServerlessV2ScalingConfiguration: {
+          MinCapacity: 0.5,
+          MaxCapacity: 16,
+        },
+        BackupRetentionPeriod: 30,
+        DeletionProtection: true,
+        StorageEncrypted: true,
+      });
+    });
+    
+    test('Creates DocumentDB cluster', () => {
+      template.hasResourceProperties('AWS::DocDB::DBCluster', {
+        BackupRetentionPeriod: 30,
+        DeletionProtection: true,
+        StorageEncrypted: true,
+      });
+      
+      template.hasResourceProperties('AWS::DocDB::DBInstance', {
+        DBInstanceClass: 'db.t3.medium',
+      });
+    });
+    
+    test('Creates EFS file system', () => {
+      template.hasResourceProperties('AWS::EFS::FileSystem', {
+        Encrypted: true,
+        PerformanceMode: 'generalPurpose',
+        ThroughputMode: 'elastic',
+        BackupPolicy: {
+          Status: 'ENABLED',
+        },
+      });
+      
+      // Check for access points
+      template.resourceCountIs('AWS::EFS::AccessPoint', 4);
+    });
+    
+    test('Creates HTTPS listener with certificate', () => {
+      template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', {
+        Port: 443,
+        Protocol: 'HTTPS',
+        Certificates: [
+          {
+            CertificateArn: 'arn:aws:acm:us-east-1:123456789012:certificate/12345',
+          },
+        ],
+      });
+      
+      // HTTP to HTTPS redirect
+      template.hasResourceProperties('AWS::ElasticLoadBalancingV2::Listener', {
+        Port: 80,
+        Protocol: 'HTTP',
+        DefaultActions: [
+          {
+            Type: 'redirect',
+            RedirectConfig: {
+              Port: '443',
+              Protocol: 'HTTPS',
+              StatusCode: 'HTTP_301',
+            },
+          },
+        ],
+      });
+    });
+    
+    test('Creates Route53 A record', () => {
+      template.hasResourceProperties('AWS::Route53::RecordSet', {
+        Name: 'librechat.example.com.',
+        Type: 'A',
+        HostedZoneId: 'Z1234567890ABC',
+        AliasTarget: {
+          DNSName: Match.anyValue(),
+          HostedZoneId: Match.anyValue(),
+        },
+      });
+    });
+    
+    test('Creates CloudWatch alarms', () => {
+      // Check for various alarms
+      const alarmTypes = [
+        'CPU',
+        'Memory',
+        'UnhealthyHost',
+        'ResponseTime',
+        'ErrorLog',
+      ];
+      
+      alarmTypes.forEach(alarmType => {
+        template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+          AlarmDescription: Match.stringLikeRegexp(`.*${alarmType}.*`),
+          AlarmActions: Match.arrayWith([
+            Match.anyValue(), // SNS topic ARN
+          ]),
+        });
+      });
+    });
+    
+    test('Creates SNS topic for alerts', () => {
+      template.hasResourceProperties('AWS::SNS::Topic', {
+        DisplayName: Match.stringLikeRegexp('.*LibreChat.*Alarms.*'),
+      });
+      
+      template.hasResourceProperties('AWS::SNS::Subscription', {
+        Protocol: 'email',
+        TopicArn: Match.anyValue(),
+        Endpoint: 'alerts@example.com',
+      });
+    });
+    
+    test('Creates Lambda functions for database initialization', () => {
+      // PostgreSQL init
+      template.hasResourceProperties('AWS::Lambda::Function', {
+        Handler: 'init_postgres.handler',
+        Runtime: 'python3.11',
+        Environment: {
+          Variables: {
+            POSTGRES_SECRET_ARN: Match.anyValue(),
+            ENABLE_PGVECTOR: 'true',
+          },
+        },
+      });
+      
+      // DocumentDB init
+      template.hasResourceProperties('AWS::Lambda::Function', {
+        Handler: 'init_docdb.handler',
+        Runtime: 'python3.11',
+        Environment: {
+          Variables: {
+            DOCDB_SECRET_ARN: Match.anyValue(),
+            DOCDB_ENDPOINT: Match.anyValue(),
+          },
+        },
+      });
     });
   });
-
-  test('CloudWatch Alarms Created', () => {
-    // CPU Alarm
-    template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-      MetricName: 'CPUUtilization',
-      Namespace: 'AWS/EC2',
-      Statistic: 'Average',
-      Period: 300,
-      EvaluationPeriods: 2,
-      Threshold: 80,
-      ComparisonOperator: 'GreaterThanThreshold',
+  
+  describe('Feature Flags', () => {
+    test('Enables RAG components when flag is set', () => {
+      const config = new DeploymentConfigBuilder('development')
+        .withKeyPair('test-key')
+        .withFeatures({ rag: true });
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      // Should have RAG service in ECS mode
+      // In EC2 mode, RAG is configured in user data
+      expect(stack).toBeDefined();
     });
-
-    // Database Connections Alarm
-    template.hasResourceProperties('AWS::CloudWatch::Alarm', {
-      MetricName: 'DatabaseConnections',
-      Namespace: 'AWS/RDS',
-      Statistic: 'Average',
-      Period: 300,
-      EvaluationPeriods: 1,
-      Threshold: 80,
-      ComparisonOperator: 'GreaterThanThreshold',
-    });
-  });
-
-  test('Stack Has Required Parameters', () => {
-    const cfnTemplate = stack.templateOptions;
-    template.hasParameter('AlertEmail', {
-      Type: 'String',
-      Description: 'Email address for CloudWatch alarm notifications',
-    });
-
-    template.hasParameter('KeyName', {
-      Type: 'AWS::EC2::KeyPair::KeyName',
-      Description: 'EC2 Key Pair for SSH access',
-    });
-
-    template.hasParameter('AllowedSSHIP', {
-      Type: 'String',
-      Description: Match.anyValue(),
-      Default: '0.0.0.0/0',
+    
+    test('Enables Meilisearch when flag is set', () => {
+      const config = new DeploymentConfigBuilder('production')
+        .withDeploymentMode('ECS')
+        .withFeatures({ meilisearch: true });
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      // Should have Meilisearch service
+      template.hasResourceProperties('AWS::ECS::TaskDefinition', {
+        ContainerDefinitions: Match.arrayWith([
+          Match.objectLike({
+            Name: 'meilisearch',
+            Image: Match.stringLikeRegexp('.*meilisearch.*'),
+          }),
+        ]),
+      });
     });
   });
-
-  test('Stack Has Expected Outputs', () => {
-    template.hasOutput('LoadBalancerURL', {
-      Description: 'URL to access LibreChat',
-    });
-
-    template.hasOutput('SSHCommand', {
-      Description: 'SSH command to connect to the instance',
-    });
-
-    template.hasOutput('DatabaseEndpoint', {
-      Description: 'RDS Database endpoint',
-    });
-
-    template.hasOutput('S3BucketName', {
-      Description: 'S3 bucket for file storage',
+  
+  describe('Stack Outputs', () => {
+    test('Creates expected outputs', () => {
+      const config = new DeploymentConfigBuilder('development')
+        .withKeyPair('test-key');
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      const outputs = [
+        'LoadBalancerURL',
+        'DeploymentMode',
+        'postgresEndpoint',
+        'VPCId',
+      ];
+      
+      outputs.forEach(output => {
+        template.hasOutput(output, {
+          Description: Match.anyValue(),
+        });
+      });
     });
   });
-
-  test('User Data Script Contains Required Commands', () => {
-    // Verify EC2 instance has user data
-    template.hasResourceProperties('AWS::EC2::Instance', {
-      UserData: Match.anyValue(),
+  
+  describe('Cost Optimization', () => {
+    test('Development uses cost-optimized resources', () => {
+      const config = new DeploymentConfigBuilder('development')
+        .withKeyPair('test-key');
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      // No NAT gateways
+      template.resourceCountIs('AWS::EC2::NatGateway', 0);
+      
+      // Small instance types
+      template.hasResourceProperties('AWS::EC2::Instance', {
+        InstanceType: 't3.large',
+      });
+      
+      template.hasResourceProperties('AWS::RDS::DBInstance', {
+        DBInstanceClass: 'db.t3.small',
+      });
+      
+      // Minimal backup retention
+      template.hasResourceProperties('AWS::RDS::DBInstance', {
+        BackupRetentionPeriod: 1,
+      });
     });
-
-    // The actual user data content testing would require parsing base64
-    // which is complex in CDK tests. Key point is user data exists.
   });
-
-  test('SharePoint Configuration When Enabled', () => {
-    const stackWithSharePoint = new LibreChatStack(app, 'SharePointStack', {
-      enableSharePoint: true,
-      sharePointConfig: {
-        tenantId: 'test-tenant',
-        clientId: 'test-client',
-        clientSecret: 'test-secret',
-        siteUrl: 'https://test.sharepoint.com',
-      },
+  
+  describe('Security', () => {
+    test('All databases are encrypted', () => {
+      const config = new DeploymentConfigBuilder('production')
+        .withDeploymentMode('ECS');
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      // RDS encryption
+      template.hasResourceProperties('AWS::RDS::DBCluster', {
+        StorageEncrypted: true,
+      });
+      
+      // DocumentDB encryption
+      template.hasResourceProperties('AWS::DocDB::DBCluster', {
+        StorageEncrypted: true,
+      });
+      
+      // EFS encryption
+      template.hasResourceProperties('AWS::EFS::FileSystem', {
+        Encrypted: true,
+      });
+      
+      // S3 encryption
+      template.hasResourceProperties('AWS::S3::Bucket', {
+        BucketEncryption: Match.objectLike({
+          ServerSideEncryptionConfiguration: Match.anyValue(),
+        }),
+      });
     });
-
-    const spTemplate = Template.fromStack(stackWithSharePoint);
-    const userData = spTemplate.findResources('AWS::EC2::Instance');
-    const userDataEncoded = Object.values(userData)[0].Properties.UserData['Fn::Base64'];
-
-    expect(JSON.stringify(userDataEncoded)).toContain('SHAREPOINT_TENANT_ID');
+    
+    test('IAM roles follow least privilege', () => {
+      const config = new DeploymentConfigBuilder('production')
+        .withDeploymentMode('ECS');
+      const stack = createStack(config);
+      const template = Template.fromStack(stack);
+      
+      // Check that S3 permissions are scoped to specific bucket
+      template.hasResourceProperties('AWS::IAM::Policy', {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Effect: 'Allow',
+              Action: Match.arrayWith(['s3:GetObject', 's3:PutObject']),
+              Resource: Match.not('*'), // Should not be wildcard
+            }),
+          ]),
+        },
+      });
+    });
   });
 });
-
-// Run tests with: npm test

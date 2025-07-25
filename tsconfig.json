@@ -1,24 +1,92 @@
-// tsconfig.json
 {
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020",
+      "DOM"
+    ],
     "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "removeComments": true,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
     "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
     "alwaysStrict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
     "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": false,
-    "inlineSourceMap": true,
-    "inlineSources": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
     "experimentalDecorators": true,
-    "strictPropertyInitialization": false,
-    "typeRoots": ["./node_modules/@types"]
+    "emitDecoratorMetadata": true,
+    "inlineSourceMap": false,
+    "inlineSources": true,
+    "preserveConstEnums": true,
+    "preserveSymlinks": false,
+    "pretty": true,
+    "typeRoots": [
+      "./node_modules/@types",
+      "./types"
+    ],
+    "types": [
+      "node",
+      "jest"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@constructs/*": ["lib/constructs/*"],
+      "@config/*": ["config/*"],
+      "@lambda/*": ["lambda/*"],
+      "@scripts/*": ["scripts/*"],
+      "@types/*": ["types/*"]
+    }
   },
-  "exclude": ["node_modules", "cdk.out"]
+  "include": [
+    "bin/**/*",
+    "lib/**/*",
+    "config/**/*",
+    "scripts/**/*.ts",
+    "test/**/*",
+    "types/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "cdk.out",
+    "dist",
+    "coverage",
+    "**/*.d.ts",
+    "**/*.js"
+  ],
+  "ts-node": {
+    "transpileOnly": false,
+    "files": true,
+    "compilerOptions": {
+      "module": "commonjs",
+      "target": "ES2020",
+      "allowJs": true
+    }
+  }
 }

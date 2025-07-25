@@ -7,13 +7,14 @@
     "exclude": [
       "README.md",
       "cdk*.json",
-      "**/*.d.ts",
       "**/*.js",
-      "tsconfig.json",
-      "package*.json",
-      "yarn.lock",
+      "**/*.d.ts",
       "node_modules",
-      "test"
+      "test/**/*",
+      "docs/**/*",
+      ".git/**/*",
+      "dist/**/*",
+      "cdk.out/**/*"
     ]
   },
   "context": {
@@ -59,6 +60,91 @@
     "@aws-cdk/aws-rds:auroraClusterChangeScopeOfInstanceParameterGroupWithEachParameters": true,
     "@aws-cdk/aws-appsync:useArnForSourceApiAssociationIdentifier": true,
     "@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials": true,
-    "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true
-  }
+    "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true,
+    
+    "librechat:defaultKeyPairName": null,
+    "librechat:defaultAlertEmail": null,
+    "librechat:defaultEnvironment": "development",
+    "librechat:enableCostOptimization": true,
+    "librechat:enableSecurityBestPractices": true,
+    "librechat:vpcCidrRanges": {
+      "development": "10.0.0.0/16",
+      "staging": "10.1.0.0/16",
+      "production": "10.2.0.0/16"
+    },
+    "librechat:instanceTypes": {
+      "development": {
+        "ec2": "t3.large",
+        "rds": "db.t3.small",
+        "documentdb": "db.t3.medium"
+      },
+      "staging": {
+        "ec2": "t3.xlarge",
+        "rds": "db.t3.medium",
+        "documentdb": "db.r5.large"
+      },
+      "production": {
+        "ec2": "t3.2xlarge",
+        "rds": "db.r6g.large",
+        "documentdb": "db.r5.xlarge"
+      }
+    },
+    "librechat:backupRetention": {
+      "development": 1,
+      "staging": 7,
+      "production": 30
+    },
+    "librechat:monitoring": {
+      "development": {
+        "enableDetailedMonitoring": false,
+        "logRetentionDays": 7
+      },
+      "staging": {
+        "enableDetailedMonitoring": true,
+        "logRetentionDays": 30
+      },
+      "production": {
+        "enableDetailedMonitoring": true,
+        "logRetentionDays": 90
+      }
+    },
+    "librechat:features": {
+      "enableRagByDefault": true,
+      "enableMeilisearchByDefault": false,
+      "enableSharePointByDefault": false
+    },
+    "librechat:containerImages": {
+      "librechat": "ghcr.io/danny-avila/librechat:latest",
+      "ragApi": "ghcr.io/danny-avila/librechat-rag-api-dev:latest",
+      "meilisearch": "getmeili/meilisearch:v1.6"
+    },
+    "librechat:bedrockModels": [
+      "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      "anthropic.claude-3-opus-20240229-v1:0",
+      "anthropic.claude-3-haiku-20240307-v1:0",
+      "amazon.titan-text-premier-v1:0",
+      "amazon.titan-text-express-v1",
+      "amazon.titan-text-lite-v1",
+      "amazon.titan-embed-text-v2:0",
+      "meta.llama3-70b-instruct-v1:0",
+      "meta.llama3-8b-instruct-v1:0",
+      "mistral.mistral-large-2407-v1:0",
+      "mistral.mixtral-8x7b-instruct-v0:1"
+    ],
+    "librechat:supportedRegions": [
+      "us-east-1",
+      "us-west-2",
+      "eu-west-1",
+      "eu-central-1",
+      "ap-southeast-1",
+      "ap-northeast-1"
+    ]
+  },
+  "toolkitStackName": "LibreChatCDKToolkit",
+  "toolkitBucketName": "librechat-cdk-toolkit-${AWS::AccountId}-${AWS::Region}",
+  "versionReporting": true,
+  "pathMetadata": true,
+  "output": "cdk.out",
+  "build": "npx tsc",
+  "requireApproval": "broadening"
 }

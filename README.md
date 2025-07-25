@@ -1,473 +1,421 @@
-# LibreChat AWS CDK Deployment
+# LibreChat AWS CDK Deployment 🚀
 
-> 🚀 **One-click enterprise deployment of LibreChat with AWS Bedrock, PostgreSQL pgvector, and RAG**
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![AWS CDK](https://img.shields.io/badge/AWS%20CDK-2.150.0-orange)](https://aws.amazon.com/cdk/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
 
-## 📦 What's Included
+> Enterprise-grade deployment of LibreChat on AWS with support for both EC2 and ECS deployments, featuring AWS Bedrock integration, PostgreSQL with pgvector, DocumentDB, and comprehensive monitoring.
 
-This CDK application provides a complete Infrastructure as Code solution for deploying LibreChat on AWS. Get a production-ready AI chat platform running in 20 minutes!
+## 📋 Table of Contents
 
-### ✨ Key Features
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Prerequisites](#-prerequisites)
+- [Quick Start](#-quick-start)
+- [Deployment Options](#-deployment-options)
+- [Configuration](#-configuration)
+- [Cost Analysis](#-cost-analysis)
+- [Migration Guide](#-migration-guide)
+- [Troubleshooting](#-troubleshooting)
+- [Security](#-security)
+- [Contributing](#-contributing)
+- [Support](#-support)
+- [License](#-license)
 
-- **Complete Infrastructure as Code** - All AWS resources defined in TypeScript
-- **Multiple Deployment Options** - AWS Console, CDK CLI, or one-click URL
-- **Automated Setup** - LibreChat containers auto-configured and started
-- **Enterprise Ready** - Security, monitoring, and scalability built-in
-- **Cost Optimized** - ~$220-250/month for a complete solution
+## ✨ Features
 
-### 🏗️ Resources Created
+### Core Features
 
-- **Networking**: VPC with public/private subnets across 2 AZs
-- **Compute**: EC2 instance (t3.xlarge) with automated LibreChat setup
-- **Database**: RDS PostgreSQL with pgvector extension for RAG
-- **Storage**: S3 bucket for document storage with encryption
-- **Load Balancing**: Application Load Balancer with health checks
-- **Security**: IAM roles, security groups, and Secrets Manager
-- **Monitoring**: CloudWatch alarms and SNS notifications
+- **🎯 Dual Deployment Modes**: Choose between simple EC2 or scalable ECS Fargate
+- **🤖 AWS Bedrock Integration**: Built-in support for Claude, Titan, and Llama models
+- **🔍 RAG Support**: Retrieval Augmented Generation with pgvector
+- **🔎 Search Engine**: Optional Meilisearch integration
+- **📊 Monitoring**: CloudWatch dashboards and alarms
+- **🔐 Security**: IAM roles, secrets management, and encryption
+- **💰 Cost Optimized**: Right-sized resources for each environment
 
-### 📁 Project Structure
+### Infrastructure Components
 
-See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed file descriptions and organization.
+- **Networking**: VPC with public/private subnets across multiple AZs
+- **Compute**: EC2 instances or ECS Fargate containers
+- **Database**: RDS PostgreSQL (with pgvector) and optional DocumentDB
+- **Storage**: S3 for documents and EFS for shared container storage
+- **Load Balancing**: Application Load Balancer with auto-scaling
+- **Security**: WAF, security groups, and KMS encryption
 
-## 🚀 Quick Start - Console Deployment
+## 🏗️ Architecture
 
-The fastest way to deploy LibreChat - no command line required!
+### EC2 Deployment Architecture
 
-### Step 1: Download the CDK Package
-
-```bash
-git clone https://github.com/your-org/librechat-cdk.git
-cd librechat-cdk
+```md
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   CloudFront    │────▶│       ALB       │────▶│   EC2 Instance  │
+│   (Optional)    │     │   (Public)      │     │   (Private)     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                         │
+                        ┌─────────────────────────────────┤
+                        │                                 │
+                   ┌────▼─────┐                    ┌─────▼─────┐
+                   │   RDS    │                    │    S3     │
+                   │PostgreSQL│                    │  Bucket   │
+                   └──────────┘                    └───────────┘
 ```
 
-### Step 2: Generate CloudFormation Template
+### ECS Deployment Architecture
 
-```bash
-npm install
-npm run build
-cdk synth > librechat-cloudformation.yaml
+```md
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   CloudFront    │────▶│       ALB       │────▶│  ECS Fargate    │
+│   (Optional)    │     │   (Public)      │     │   (Private)     │
+└─────────────────┘     └─────────────────┘     └─────┬───────────┘
+                                                       │
+                        ┌──────────────────────────────┼─────────────┐
+                        │                              │             │
+                   ┌────▼─────┐  ┌─────────────┐  ┌───▼────┐  ┌────▼────┐
+                   │   RDS    │  │ DocumentDB  │  │  EFS   │  │   S3    │
+                   │PostgreSQL│  │ (Optional)  │  │        │  │ Bucket  │
+                   └──────────┘  └─────────────┘  └────────┘  └─────────┘
 ```
-
-### Step 3: Deploy via AWS Console
-
-1. Go to [AWS CloudFormation Console](https://console.aws.amazon.com/cloudformation)
-2. Click **Create stack** → **With new resources**
-3. Choose **Upload a template file**
-4. Upload `librechat-cloudformation.yaml`
-5. Configure parameters:
-   - **Stack name**: LibreChat-Production
-   - **AlertEmail**: <your-email@domain.com>
-   - **KeyName**: Select your EC2 key pair
-   - **AllowedSSHIP**: Your IP (x.x.x.x/32)
-6. Review and create (acknowledge IAM resources)
-
-### Step 4: Access LibreChat
-
-- Wait 15-20 minutes for deployment
-- Find the URL in CloudFormation **Outputs** tab
-- Create your first user account
 
 ## 📋 Prerequisites
 
-Before deploying, ensure you have:
+### Required
 
-1. **AWS Account with Bedrock Access**
-   - Go to [AWS Bedrock console](https://console.aws.amazon.com/bedrock/)
-   - Request access to Anthropic Claude models
-   - Wait for approval (usually instant)
+- ✅ AWS Account with appropriate permissions
+- ✅ Node.js 18.x or later
+- ✅ AWS CLI configured with credentials
+- ✅ AWS Bedrock access enabled in your region
 
-2. **EC2 Key Pair** (for SSH access)
-   - Create in [EC2 console](https://console.aws.amazon.com/ec2/) > Key Pairs
-   - Download and save the .pem file
+### Optional
 
-3. **For CLI Deployment**:
+- 🔧 Docker Desktop (for local development)
+- 🔑 EC2 Key Pair (for SSH access)
+- 🌐 Domain name and SSL certificate (for HTTPS)
+- 📧 Email address for monitoring alerts
 
-   ```bash
-   npm install -g aws-cdk
-   aws configure
-   ```
+## 🚀 Quick Start
+
+### 1. Clone and Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/librechat-cdk.git
+cd librechat-cdk
+
+# Run the setup wizard
+./scripts/setup-environment.sh
+```
+
+### 2. Deploy with Interactive Wizard
+
+```bash
+# Launch the deployment wizard
+npm run wizard
+```
+
+### 3. Access LibreChat
+
+After deployment completes (15-20 minutes), you'll receive:
+
+- 🌐 Application URL
+- 📊 CloudWatch Dashboard URL
+- 🔑 SSH instructions (for EC2 deployments)
 
 ## 🎯 Deployment Options
 
-### Option 1: One-Click Deploy URL
-
-Create a shareable deployment link:
+### Option 1: Development Environment
 
 ```bash
-./scripts/create-one-click-deploy.sh us-east-1
-
-# This generates a URL like:
-# https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/new?stackName=LibreChat&templateURL=...
+# Minimal setup for testing
+npm run deploy:dev -- \
+  -c configSource=minimal-dev \
+  -c keyPairName=my-dev-key
 ```
 
-Share this URL with others for instant deployment!
+**Cost**: ~$150/month | **Features**: Basic LibreChat without RAG
 
-### Option 2: Deploy via CDK CLI
+### Option 2: Production EC2
 
 ```bash
-# First time only - bootstrap CDK
-cdk bootstrap aws://ACCOUNT-NUMBER/REGION
-
-# Deploy with interactive prompts
-./scripts/deploy.sh
-
-# Or deploy directly
-cdk deploy \
-  --parameters AlertEmail=admin@company.com \
-  --parameters KeyName=my-key-pair \
-  --parameters AllowedSSHIP=203.0.113.1/32
+# Cost-optimized production
+npm run deploy:prod -- \
+  -c configSource=production-ec2 \
+  -c keyPairName=prod-key \
+  -c alertEmail=ops@company.com \
+  -c domainName=chat.company.com
 ```
 
-### Option 3: Deploy via CloudFormation CLI
+**Cost**: ~$250/month | **Features**: Full features, single instance
+
+### Option 3: Production ECS
 
 ```bash
-# Create parameters file
-cat > parameters.json << EOF
-[
-  {"ParameterKey": "AlertEmail", "ParameterValue": "admin@company.com"},
-  {"ParameterKey": "KeyName", "ParameterValue": "my-key-pair"},
-  {"ParameterKey": "AllowedSSHIP", "ParameterValue": "203.0.113.1/32"}
-]
-EOF
-
-# Deploy stack
-aws cloudformation create-stack \
-  --stack-name LibreChat-Production \
-  --template-body file://librechat-cloudformation.yaml \
-  --parameters file://parameters.json \
-  --capabilities CAPABILITY_IAM
+# Scalable production deployment
+npm run deploy:prod -- \
+  -c configSource=production-ecs \
+  -c alertEmail=ops@company.com \
+  -c domainName=chat.company.com \
+  -c certificateArn=arn:aws:acm:...
 ```
 
-### Option 4: AWS Service Catalog (For Organizations)
+**Cost**: ~$400/month | **Features**: Auto-scaling, high availability
 
-Create a one-click product for your organization:
+### Option 4: Enterprise
 
 ```bash
-# Upload template to S3
-aws s3 cp librechat-cloudformation.yaml s3://your-bucket/templates/
-
-# Create Service Catalog product
-aws servicecatalog create-product \
-  --name "LibreChat Enterprise" \
-  --owner "IT Department" \
-  --product-type CLOUD_FORMATION_TEMPLATE \
-  --provisioning-artifact-parameters file://product-config.json
+# Full enterprise features
+npm run deploy:prod -- \
+  -c configSource=enterprise \
+  -c alertEmail=ops@company.com \
+  -c domainName=chat.company.com \
+  -c enableSharePoint=true
 ```
 
-## 🔧 Configuration & Customization
+**Cost**: ~$800/month | **Features**: All features, multi-AZ, DocumentDB
 
-### Stack Parameters
+## ⚙️ Configuration
 
-| Parameter | Description | Default | Required |
-|-----------|-------------|---------|----------|
-| AlertEmail | Email for CloudWatch alarms | - | No |
-| KeyName | EC2 SSH key pair name | - | Yes |
-| AllowedSSHIP | IP range for SSH access | 0.0.0.0/0 | No |
+### Environment Configuration
 
-### Advanced Customization via CDK Context
+Create `.env.librechat` for environment-specific settings:
 
 ```bash
-# Deploy with larger instance
-cdk deploy --context instanceType=t3.2xlarge
+# Deployment Settings
+DEPLOYMENT_ENV=production
+DEPLOYMENT_MODE=ECS
+AWS_REGION=us-east-1
 
-# Deploy with custom database
-cdk deploy --context dbInstanceClass=db.t3.large
+# Security
+KEY_PAIR_NAME=prod-key
+ALLOWED_IPS=10.0.0.0/8
 
-# Enable SharePoint integration
-cdk deploy \
-  --context enableSharePoint=true \
-  --context sharePointTenantId=YOUR-TENANT-ID \
-  --context sharePointClientId=YOUR-CLIENT-ID \
-  --context sharePointClientSecret=YOUR-SECRET \
-  --context sharePointSiteUrl=https://company.sharepoint.com/sites/docs
+# Monitoring
+ALERT_EMAIL=ops@company.com
+
+# Features
+ENABLE_RAG=true
+ENABLE_MEILISEARCH=true
+
+# Domain Configuration
+DOMAIN_NAME=chat.company.com
+CERTIFICATE_ARN=arn:aws:acm:...
+HOSTED_ZONE_ID=Z1234567890ABC
 ```
 
-### Infrastructure Customization
+### Application Configuration
 
-Edit `lib/librechat-stack.ts` to modify:
+Edit `config/librechat.yaml` for LibreChat-specific settings:
 
-- VPC CIDR ranges and subnet configuration
-- Instance types and storage sizes
-- Security group rules
-- Monitoring thresholds
-- Backup schedules
-- Additional AWS services
+```yaml
+version: 1.1.5
 
-## 📊 Cost Analysis
+endpoints:
+  bedrock:
+    titleModel: "anthropic.claude-3-haiku-20240307-v1:0"
+    models:
+      default:
+        - "anthropic.claude-3-5-sonnet-20241022-v2:0"
+        - "anthropic.claude-3-opus-20240229-v1:0"
+        - "amazon.titan-text-premier-v1:0"
 
-### Estimated Monthly Costs
+fileConfig:
+  endpoints:
+    default:
+      fileLimit: 50
+      fileSizeLimit: 100
+      supportedMimeTypes:
+        - "application/pdf"
+        - "text/plain"
 
-| Service | Configuration | Monthly Cost |
-|---------|--------------|--------------|
-| EC2 | t3.xlarge (4 vCPU, 16GB RAM) | ~$120 |
-| RDS | db.t3.medium PostgreSQL | ~$70 |
-| ALB | Application Load Balancer | ~$20 |
-| S3 | Document storage | ~$5-20 |
-| **Total** | **Infrastructure** | **~$220-250** |
+registration:
+  enabled: true
+  allowedDomains:
+    - "company.com"
+```
+
+### Advanced Configuration
+
+For detailed configuration options, see:
+
+- [Configuration Guide](docs/CONFIGURATION.md)
+- [Environment Variables](docs/ENVIRONMENT_VARIABLES.md)
+- [Feature Flags](docs/FEATURE_FLAGS.md)
+
+## 💰 Cost Analysis
+
+### Estimated Monthly Costs by Environment
+
+| Component | Development | Production EC2 | Production ECS | Enterprise |
+|-----------|-------------|----------------|----------------|------------|
+| Compute | $80 | $120 | $200 | $400 |
+| Database | $20 | $70 | $150 | $300 |
+| Storage | $5 | $10 | $20 | $50 |
+| Network | $15 | $30 | $50 | $100 |
+| Other | $10 | $20 | $30 | $50 |
+| **Total** | **~$130** | **~$250** | **~$450** | **~$900** |
 
 ### Cost Optimization Tips
 
-1. **Development Environment**
+1. **Use Savings Plans**: Save up to 30% on compute costs
+2. **Right-size Resources**: Monitor and adjust instance types
+3. **Enable Auto-scaling**: Scale down during off-hours
+4. **S3 Lifecycle Policies**: Move old data to cheaper storage
+5. **Reserved Instances**: For stable production workloads
+
+Run cost estimation:
+
+```bash
+npm run estimate-cost production
+```
+
+## 🔄 Migration Guide
+
+### From Original EC2 Deployment
+
+If you're using the original LibreChat CDK deployment:
+
+1. **Backup Current State**
 
    ```bash
-   cdk deploy --context instanceType=t3.medium --context dbInstanceClass=db.t3.micro
+   ./scripts/backup-production.sh
    ```
 
-2. **Auto-Stop/Start Schedule**
+2. **Update Code**
 
    ```bash
-   # Add to crontab for non-production
-   0 19 * * 1-5 aws ec2 stop-instances --instance-ids $INSTANCE_ID
-   0 7 * * 1-5 aws ec2 start-instances --instance-ids $INSTANCE_ID
+   git pull origin main
+   npm install
    ```
 
-3. **Monitor Usage**
+3. **Run Migration**
 
    ```bash
-   aws ce get-cost-and-usage \
-     --time-period Start=2025-01-01,End=2025-01-31 \
-     --granularity MONTHLY \
-     --metrics "UnblendedCost" \
-     --group-by Type=DIMENSION,Key=SERVICE
+   ./scripts/migrate-to-v2.sh
    ```
 
-## 🔐 Security Features
+See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for detailed instructions.
 
-- **Encryption**: All data encrypted at rest (RDS, S3) and in transit (TLS)
-- **Network Security**: Private subnets for database, security groups with least privilege
-- **IAM Roles**: No hardcoded credentials, using AWS best practices
-- **Secrets Manager**: Automated password generation and rotation ready
-- **Monitoring**: CloudWatch alarms for security events
-- **Compliance Ready**: Supports HIPAA, SOC2, and GDPR requirements
+## 🔧 Troubleshooting
 
-## 📋 Post-Deployment Setup
+### Common Issues
 
-### 1. Access LibreChat
-
-After deployment completes (~20 minutes):
-
-1. Find the Load Balancer URL in CloudFormation Outputs
-2. Access: `http://YOUR-ALB-DNS-NAME`
-3. Create admin account:
-
-   ```bash
-   curl -X POST http://YOUR-ALB-DNS/api/auth/register \
-     -H "Content-Type: application/json" \
-     -d '{
-       "email": "admin@yourdomain.com",
-       "password": "SecurePassword123!",
-       "name": "Admin User"
-     }'
-   ```
-
-### 2. Configure HTTPS (Required for Production)
-
-#### Option A: AWS Certificate Manager with Route 53
+**Issue**: Deployment fails with "no space left on device"
 
 ```bash
-# Request certificate
-aws acm request-certificate \
-  --domain-name chat.yourdomain.com \
-  --validation-method DNS
-
-# After validation, update ALB listener
-aws elbv2 create-listener \
-  --load-balancer-arn $ALB_ARN \
-  --protocol HTTPS \
-  --port 443 \
-  --certificates CertificateArn=$CERT_ARN \
-  --default-actions Type=forward,TargetGroupArn=$TG_ARN
+# Solution: Clean up Docker
+docker system prune -a
 ```
 
-#### Option B: Use CloudFlare
-
-- Add your domain to CloudFlare
-- Point to ALB DNS name
-- Enable "Full SSL/TLS"
-
-### 3. Configure SharePoint Integration (Optional)
-
-1. **Create Azure App Registration**
-   - Go to Azure Portal > App registrations
-   - Create new registration
-   - Add Microsoft Graph permissions: `Files.Read.All`, `Sites.Read.All`
-   - Create client secret
-
-2. **Update LibreChat Configuration**
-
-   ```bash
-   # SSH to instance
-   ssh -i your-key.pem ubuntu@INSTANCE-IP
-
-   # Add to .env file
-   echo "SHAREPOINT_TENANT_ID=your-tenant-id" >> /opt/LibreChat/.env
-   echo "SHAREPOINT_CLIENT_ID=your-client-id" >> /opt/LibreChat/.env
-   echo "SHAREPOINT_CLIENT_SECRET=your-secret" >> /opt/LibreChat/.env
-
-   # Restart containers
-   cd /opt/LibreChat && docker-compose restart
-   ```
-
-### 4. Set Up Monitoring Dashboard
-
-Create a CloudWatch dashboard for key metrics:
+**Issue**: Cannot access application after deployment
 
 ```bash
-aws cloudwatch put-dashboard \
-  --dashboard-name LibreChat-Monitoring \
-  --dashboard-body file://cloudwatch-dashboard.json
+# Check ALB target health
+aws elbv2 describe-target-health \
+  --target-group-arn $(aws cloudformation describe-stacks \
+    --stack-name LibreChatStack \
+    --query 'Stacks[0].Outputs[?OutputKey==`TargetGroupArn`].OutputValue' \
+    --output text)
 ```
 
-## 🧪 Testing & Validation
-
-### Automated Tests
+**Issue**: High costs
 
 ```bash
-# Run CDK unit tests
-npm test
-
-# Validate CloudFormation template
-cdk synth --quiet
-cfn-lint librechat-cloudformation.yaml
+# Generate cost report
+npm run estimate-cost --compare
 ```
 
-### Manual Validation Checklist
+See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for comprehensive guide.
 
-- [ ] Access LibreChat URL successfully
-- [ ] Create and login with user account
-- [ ] Select and use Bedrock models
-- [ ] Upload and query documents (RAG)
-- [ ] Check CloudWatch alarms are active
-- [ ] Verify SSL certificate (if configured)
-- [ ] Test file uploads to S3
-- [ ] Monitor costs in Cost Explorer
+## 🔐 Security
 
-### Load Testing
+### Security Features
 
-```bash
-# Install artillery
-npm install -g artillery
+- ✅ **Encryption**: At rest and in transit
+- ✅ **IAM Roles**: Least privilege access
+- ✅ **Secrets Manager**: No hardcoded credentials
+- ✅ **VPC Isolation**: Private subnets for sensitive resources
+- ✅ **WAF Integration**: Protection against common attacks
+- ✅ **Security Groups**: Restrictive inbound rules
+- ✅ **Audit Logging**: CloudTrail and VPC Flow Logs
 
-# Run load test
-artillery quick --count 50 --num 10 http://YOUR-ALB-DNS/health
-```
+### Best Practices
 
-## 🛠️ Maintenance & Operations
+1. **Regular Updates**: Keep containers and dependencies updated
+2. **Access Control**: Use MFA for AWS console access
+3. **Monitoring**: Enable GuardDuty and Security Hub
+4. **Backups**: Regular automated backups
+5. **Incident Response**: Have a plan and test it
 
-### Updating LibreChat
-
-```bash
-# SSH to instance
-ssh -i your-key.pem ubuntu@INSTANCE-IP
-
-# Update containers
-cd /opt/LibreChat
-docker-compose pull
-docker-compose down
-docker-compose up -d
-```
-
-### Backup & Recovery
-
-Automated backups are configured for:
-
-- **RDS**: 7-day retention with point-in-time recovery
-- **S3**: Versioning enabled
-
-Manual backup:
-
-```bash
-# Database backup
-aws rds create-db-snapshot \
-  --db-instance-identifier librechat-postgres \
-  --db-snapshot-identifier manual-backup-$(date +%Y%m%d)
-
-# S3 backup
-aws s3 sync s3://source-bucket s3://backup-bucket
-```
-
-### Monitoring & Alerts
-
-View CloudWatch dashboards:
-
-```bash
-# Get metrics
-aws cloudwatch get-metric-statistics \
-  --namespace AWS/EC2 \
-  --metric-name CPUUtilization \
-  --dimensions Name=InstanceId,Value=$INSTANCE_ID \
-  --statistics Average \
-  --start-time 2025-01-01T00:00:00Z \
-  --end-time 2025-01-02T00:00:00Z \
-  --period 3600
-```
-
-## 🧹 Cleanup
-
-To avoid ongoing charges, remove all resources:
-
-```bash
-# Option 1: Via CDK
-cdk destroy
-
-# Option 2: Via CloudFormation Console
-# Select stack → Delete
-
-# Option 3: Via CLI
-aws cloudformation delete-stack --stack-name LibreChat-Production
-
-# Option 4: Use cleanup script
-./scripts/cleanup.sh
-```
-
-## 🆘 Troubleshooting
-
-### Common Issues & Solutions
-
-| Issue | Solution |
-|-------|----------|
-| Stack creation fails | Check CloudFormation Events tab for specific error |
-| Can't access LibreChat | Wait 10 minutes, check security group, verify ALB target health |
-| Bedrock models not available | Ensure Bedrock access is enabled in AWS Console |
-| High costs | Set up AWS Budgets, use smaller instances for dev/test |
-| Database connection errors | Check security groups, verify RDS is available |
-
-### Debug Commands
-
-```bash
-# View instance logs
-aws ec2 get-console-output --instance-id $INSTANCE_ID
-
-# Check container status
-ssh -i key.pem ubuntu@INSTANCE-IP "docker ps"
-
-# View application logs
-ssh -i key.pem ubuntu@INSTANCE-IP "docker logs librechat"
-
-# Test local health
-ssh -i key.pem ubuntu@INSTANCE-IP "curl localhost:3080/health"
-```
-
-## 📚 Additional Resources
-
-- **LibreChat Documentation**: <https://www.librechat.ai/docs>
-- **AWS CDK Reference**: <https://docs.aws.amazon.com/cdk/>
-- **Project Structure**: See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
-- **GitHub Issues**: <https://github.com/danny-avila/LibreChat/issues>
-- **Community Discord**: <https://discord.librechat.ai>
+See [SECURITY.md](docs/SECURITY.md) for detailed security guide.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please:
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/your-org/librechat-cdk.git
+cd librechat-cdk
+
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run linter
+npm run lint
+
+# Local development
+docker-compose -f docker-compose.local.yml up
+```
+
+### Pull Request Process
 
 1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📞 Support
+
+### Getting Help
+
+- 📖 **Documentation**: Check `/docs` directory
+- 💬 **Discord**: [Join our community](https://discord.librechat.ai)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/your-org/librechat-cdk/issues)
+- 📧 **Email**: <support@librechat.ai>
+
+### Useful Commands
+
+```bash
+# View all available commands
+npm run
+
+# Check deployment status
+aws cloudformation describe-stacks --stack-name LibreChatStack
+
+# View logs
+aws logs tail /aws/librechat --follow
+
+# SSH to EC2 instance
+./scripts/ssh-to-instance.sh
+
+# Create support bundle
+./scripts/create-support-bundle.sh
+```
 
 ## 📄 License
 
-This CDK application is provided under the MIT License. LibreChat itself is also MIT licensed.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+## 🙏 Acknowledgments
 
-**Ready to deploy?** Choose your preferred method above and have LibreChat running in under 30 minutes! 🚀
+- [LibreChat](https://github.com/danny-avila/LibreChat) - The amazing open-source AI chat platform
+- [AWS CDK](https://aws.amazon.com/cdk/) - Infrastructure as Code framework
+- [Anthropic](https://www.anthropic.com/) - For Claude models via AWS Bedrock
+- Our amazing community of contributors
