@@ -1,178 +1,219 @@
-{
-  "name": "librechat-cdk",
-  "version": "2.0.0",
-  "description": "AWS CDK deployment for LibreChat Enterprise with Bedrock, pgvector, DocumentDB, and RAG",
-  "main": "lib/librechat-stack.js",
-  "bin": {
-    "librechat": "bin/librechat.js"
-  },
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage",
-    "cdk": "cdk",
-    "synth": "npm run build && cdk synth",
-    "diff": "npm run build && cdk diff",
-    "deploy": "npm run build && cdk deploy",
-    "deploy:dev": "npm run build && cdk deploy -c configSource=standard-dev",
-    "deploy:staging": "npm run build && DEPLOYMENT_ENV=staging cdk deploy",
-    "deploy:prod": "npm run build && DEPLOYMENT_ENV=production cdk deploy -c configSource=production-ecs",
-    "deploy:all": "npm run build && cdk deploy --all",
-    "destroy": "cdk destroy",
-    "destroy:all": "cdk destroy --all",
-    "bootstrap": "cdk bootstrap",
-    "clean": "rm -rf cdk.out lib/*.js lib/**/*.js bin/*.js test/*.js",
-    "clean:all": "npm run clean && rm -rf node_modules",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix",
-    "format": "prettier --write '**/*.{ts,js,json,md}'",
-    "format:check": "prettier --check '**/*.{ts,js,json,md}'",
-    "validate": "npm run lint && npm run test && npm run build",
-    "wizard": "bash scripts/deploy-interactive.sh",
-    "switch-mode": "ts-node scripts/switch-deployment-mode.ts",
-    "generate-config": "ts-node scripts/generate-config.ts",
-    "estimate-cost": "ts-node scripts/estimate-cost.ts",
-    "create-one-click": "bash scripts/create-one-click-deploy.sh",
-    "export-template": "npm run build && cdk synth > cloudformation-template.yaml",
-    "export-all-templates": "npm run build && for stack in $(cdk list); do cdk synth $stack > $stack.yaml; done",
-    "check-deps": "npm outdated",
-    "update-deps": "npm update",
-    "update-deps:major": "npm-check-updates -u && npm install",
-    "precommit": "npm run validate",
-    "prepare": "husky install"
-  },
-  "dependencies": {
-    "aws-cdk-lib": "2.150.0",
-    "constructs": "^10.3.0",
-    "source-map-support": "^0.5.21"
-  },
-  "devDependencies": {
-    "@types/jest": "^29.5.11",
-    "@types/node": "20.11.17",
-    "@typescript-eslint/eslint-plugin": "^6.21.0",
-    "@typescript-eslint/parser": "^6.21.0",
-    "aws-cdk": "2.150.0",
-    "eslint": "^8.56.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-import": "^2.29.1",
-    "eslint-plugin-prettier": "^5.1.3",
-    "husky": "^9.0.10",
-    "jest": "^29.7.0",
-    "npm-check-updates": "^16.14.14",
-    "prettier": "^3.2.5",
-    "ts-jest": "^29.1.2",
-    "ts-node": "^10.9.2",
-    "typescript": "~5.3.3"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/your-org/librechat-cdk.git"
-  },
-  "keywords": [
-    "aws",
-    "cdk",
-    "librechat",
-    "ai",
-    "chat",
-    "bedrock",
-    "rag",
-    "pgvector",
-    "documentdb",
-    "infrastructure-as-code"
-  ],
-  "author": "Your Organization",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/your-org/librechat-cdk/issues"
-  },
-  "homepage": "https://github.com/your-org/librechat-cdk#readme",
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/test"
-    ],
-    "testMatch": [
-      "**/*.test.ts"
-    ],
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "lib/**/*.ts",
-      "bin/**/*.ts",
-      "!lib/**/*.d.ts",
-      "!lib/**/*.test.ts"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      }
-    }
-  },
-  "prettier": {
-    "semi": true,
-    "trailingComma": "es5",
-    "singleQuote": true,
-    "printWidth": 100,
-    "tabWidth": 2
-  },
-  "eslintConfig": {
-    "parser": "@typescript-eslint/parser",
-    "extends": [
-      "eslint:recommended",
-      "plugin:@typescript-eslint/recommended",
-      "plugin:import/errors",
-      "plugin:import/warnings",
-      "plugin:import/typescript",
-      "prettier"
-    ],
-    "plugins": [
-      "@typescript-eslint",
-      "import",
-      "prettier"
-    ],
-    "env": {
-      "node": true,
-      "jest": true
-    },
-    "rules": {
-      "prettier/prettier": "error",
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          "argsIgnorePattern": "^_"
+import json
+import logging
+import os
+import time
+import boto3
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# Initialize AWS clients
+secrets_client = boto3.client('secretsmanager')
+
+
+def get_db_credentials(secret_id):
+    """Retrieve database credentials from AWS Secrets Manager"""
+    try:
+        response = secrets_client.get_secret_value(SecretId=secret_id)
+        secret = json.loads(response['SecretString'])
+        return secret
+    except Exception as e:
+        logger.error(f"Error retrieving secret: {str(e)}")
+        raise
+
+
+def wait_for_db(host, port, username, password, max_retries=30, retry_delay=10):
+    """Wait for DocumentDB to become available"""
+    for i in range(max_retries):
+        try:
+            # DocumentDB requires TLS
+            client = MongoClient(
+                f"mongodb://{username}:{password}@{host}:{port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem&replicaSet=rs0",
+                serverSelectionTimeoutMS=5000
+            )
+            # Test connection
+            client.admin.command('ping')
+            client.close()
+            logger.info("DocumentDB is available")
+            return True
+        except ServerSelectionTimeoutError:
+            logger.info(f"Waiting for DocumentDB... Attempt {i+1}/{max_retries}")
+            if i < max_retries - 1:
+                time.sleep(retry_delay)
+        except Exception as e:
+            logger.error(f"Error connecting to DocumentDB: {str(e)}")
+            if i < max_retries - 1:
+                time.sleep(retry_delay)
+    
+    raise Exception("DocumentDB did not become available in time")
+
+
+def init_collections(db):
+    """Initialize DocumentDB collections and indexes"""
+    try:
+        # Collections for LibreChat
+        collections = {
+            'users': [
+                {'key': {'email': 1}, 'unique': True},
+                {'key': {'username': 1}, 'unique': True},
+                {'key': {'createdAt': 1}}
+            ],
+            'conversations': [
+                {'key': {'userId': 1, 'createdAt': -1}},
+                {'key': {'endpoint': 1}},
+                {'key': {'title': 'text'}}
+            ],
+            'messages': [
+                {'key': {'conversationId': 1, 'createdAt': 1}},
+                {'key': {'userId': 1}},
+                {'key': {'parentMessageId': 1}}
+            ],
+            'presets': [
+                {'key': {'userId': 1}},
+                {'key': {'title': 1}}
+            ],
+            'files': [
+                {'key': {'userId': 1, 'createdAt': -1}},
+                {'key': {'type': 1}},
+                {'key': {'filename': 1}}
+            ],
+            'assistants': [
+                {'key': {'userId': 1}},
+                {'key': {'name': 1}}
+            ],
+            'tools': [
+                {'key': {'userId': 1}},
+                {'key': {'name': 1}},
+                {'key': {'type': 1}}
+            ],
+            'sessions': [
+                {'key': {'userId': 1}},
+                {'key': {'expiresAt': 1}, 'expireAfterSeconds': 0}
+            ]
         }
-      ],
-      "import/order": [
-        "error",
-        {
-          "groups": [
-            "builtin",
-            "external",
-            "internal",
-            "parent",
-            "sibling",
-            "index"
-          ],
-          "newlines-between": "always"
+        
+        # Create collections and indexes
+        for collection_name, indexes in collections.items():
+            # Create collection if it doesn't exist
+            if collection_name not in db.list_collection_names():
+                db.create_collection(collection_name)
+                logger.info(f"Created collection: {collection_name}")
+            else:
+                logger.info(f"Collection already exists: {collection_name}")
+            
+            # Create indexes
+            collection = db[collection_name]
+            for index_spec in indexes:
+                try:
+                    if 'expireAfterSeconds' in index_spec:
+                        collection.create_index(
+                            index_spec['key'],
+                            expireAfterSeconds=index_spec['expireAfterSeconds']
+                        )
+                    else:
+                        collection.create_index(
+                            index_spec['key'],
+                            unique=index_spec.get('unique', False)
+                        )
+                    logger.info(f"Created index on {collection_name}: {index_spec['key']}")
+                except OperationFailure as e:
+                    if "already exists" in str(e):
+                        logger.info(f"Index already exists on {collection_name}: {index_spec['key']}")
+                    else:
+                        raise
+        
+        # Create system indexes for performance
+        db.users.create_index({'lastLogin': -1})
+        db.conversations.create_index({'updatedAt': -1})
+        db.messages.create_index({'model': 1})
+        
+        logger.info("All collections and indexes created successfully")
+        
+    except Exception as e:
+        logger.error(f"Error initializing collections: {str(e)}")
+        raise
+
+
+def handler(event, context):
+    """Lambda handler for DocumentDB initialization"""
+    logger.info(f"Received event: {json.dumps(event)}")
+    
+    try:
+        # Get database connection details from environment or event
+        db_host = event.get('DBHost', os.environ.get('DB_HOST'))
+        db_port = event.get('DBPort', os.environ.get('DB_PORT', '27017'))
+        db_name = event.get('DBName', os.environ.get('DB_NAME', 'librechat'))
+        secret_id = event.get('SecretId', os.environ.get('DB_SECRET_ID'))
+        
+        if not db_host:
+            raise ValueError("Database host not provided")
+        
+        # Get credentials from Secrets Manager if provided
+        if secret_id:
+            credentials = get_db_credentials(secret_id)
+            db_user = credentials.get('username', 'docdbadmin')
+            db_password = credentials.get('password')
+        else:
+            db_user = event.get('DBUser', os.environ.get('DB_USER', 'docdbadmin'))
+            db_password = event.get('DBPassword', os.environ.get('DB_PASSWORD'))
+        
+        if not db_password:
+            raise ValueError("Database password not provided")
+        
+        # Wait for database to be available
+        wait_for_db(db_host, db_port, db_user, db_password)
+        
+        # Connect to DocumentDB
+        # Note: In Lambda, the CA file should be included in the deployment package
+        client = MongoClient(
+            f"mongodb://{db_user}:{db_password}@{db_host}:{db_port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem&replicaSet=rs0"
+        )
+        
+        logger.info(f"Connected to DocumentDB at {db_host}:{db_port}")
+        
+        # Get or create database
+        db = client[db_name]
+        
+        # Initialize collections and indexes
+        init_collections(db)
+        
+        # Close connection
+        client.close()
+        
+        response = {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'DocumentDB initialized successfully',
+                'database': db_name,
+                'collections': list(db.list_collection_names())
+            })
         }
-      ]
-    }
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "npm run precommit",
-      "pre-push": "npm run validate"
-    }
-  }
-}
+        
+        # Return response for CloudFormation Custom Resource
+        if event.get('RequestType'):
+            response['PhysicalResourceId'] = f"docdb-init-{db_host}-{db_name}"
+            response['Data'] = {
+                'Message': 'DocumentDB initialized successfully'
+            }
+        
+        logger.info("DocumentDB initialization completed successfully")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in handler: {str(e)}")
+        
+        response = {
+            'statusCode': 500,
+            'body': json.dumps({
+                'error': str(e)
+            })
+        }
+        
+        if event.get('RequestType'):
+            response['PhysicalResourceId'] = 'docdb-init-failed'
+            response['Reason'] = str(e)
+        
+        raise

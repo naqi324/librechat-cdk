@@ -12,7 +12,6 @@ services:
       POSTGRES_DB: librechat
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
     ports:
       - "5432:5432"
     healthcheck:
@@ -32,7 +31,6 @@ services:
       MONGO_INITDB_DATABASE: LibreChat
     volumes:
       - mongodb_data:/data/db
-      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init.js
     ports:
       - "27017:27017"
     command: mongod --replSet rs0
@@ -90,7 +88,7 @@ services:
       - CHUNK_OVERLAP=200
       - LOG_LEVEL=DEBUG
     volumes:
-      - ./config/rag-config.yaml:/app/config.yaml
+      - rag_config:/app/config
     ports:
       - "8000:8000"
 
@@ -142,7 +140,7 @@ services:
       ENDPOINTS: openAI,assistants,azureOpenAI,bingAI,google,gptPlugins,anthropic
       
     volumes:
-      - ./config/librechat.yaml:/app/librechat.yaml
+      - librechat_config:/app/config
       - librechat_uploads:/app/client/public/uploads
       - librechat_logs:/app/api/logs
     ports:
@@ -159,7 +157,6 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
-      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/init.sh
       - localstack_data:/var/lib/localstack
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -184,8 +181,7 @@ services:
     depends_on:
       - librechat
     volumes:
-      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./config/ssl:/etc/nginx/ssl:ro
+      - nginx_config:/etc/nginx/conf.d:ro
     ports:
       - "80:80"
       - "443:443"
@@ -196,7 +192,10 @@ volumes:
   meilisearch_data:
   librechat_uploads:
   librechat_logs:
+  librechat_config:
   localstack_data:
+  rag_config:
+  nginx_config:
 
 networks:
   default:

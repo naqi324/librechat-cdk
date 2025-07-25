@@ -278,7 +278,8 @@ If you're using the original LibreChat CDK deployment:
 1. **Backup Current State**
 
    ```bash
-   ./scripts/backup-production.sh
+   # Create backup manually
+   aws rds create-db-snapshot --db-instance-identifier librechat-postgres --db-snapshot-identifier backup-$(date +%Y%m%d)
    ```
 
 2. **Update Code**
@@ -291,7 +292,8 @@ If you're using the original LibreChat CDK deployment:
 3. **Run Migration**
 
    ```bash
-   ./scripts/migrate-to-v2.sh
+   # Run CDK deployment with the new version
+   npm run deploy
    ```
 
 See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for detailed instructions.
@@ -402,11 +404,11 @@ aws cloudformation describe-stacks --stack-name LibreChatStack
 # View logs
 aws logs tail /aws/librechat --follow
 
-# SSH to EC2 instance
-./scripts/ssh-to-instance.sh
+# SSH to EC2 instance (replace with your instance IP)
+ssh -i your-key.pem ubuntu@INSTANCE-IP
 
-# Create support bundle
-./scripts/create-support-bundle.sh
+# Get instance logs
+aws ec2 get-console-output --instance-id INSTANCE-ID
 ```
 
 ## 📄 License

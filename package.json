@@ -31,8 +31,6 @@
     "format:check": "prettier --check '**/*.{ts,js,json,md}'",
     "validate": "npm run lint && npm run test && npm run build",
     "wizard": "bash scripts/deploy-interactive.sh",
-    "switch-mode": "ts-node scripts/switch-deployment-mode.ts",
-    "generate-config": "ts-node scripts/generate-config.ts",
     "estimate-cost": "ts-node scripts/estimate-cost.ts",
     "create-one-click": "bash scripts/create-one-click-deploy.sh",
     "export-template": "npm run build && cdk synth > cloudformation-template.yaml",
@@ -49,11 +47,15 @@
     "source-map-support": "^0.5.21"
   },
   "devDependencies": {
+    "@aws-sdk/client-ec2": "^3.540.0",
+    "@aws-sdk/client-pricing": "^3.540.0",
     "@types/jest": "^29.5.11",
     "@types/node": "20.11.17",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "aws-cdk": "2.150.0",
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.3",
     "eslint": "^8.56.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.1",
@@ -91,33 +93,6 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/test"
-    ],
-    "testMatch": [
-      "**/*.test.ts"
-    ],
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "lib/**/*.ts",
-      "bin/**/*.ts",
-      "!lib/**/*.d.ts",
-      "!lib/**/*.test.ts"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 80,
-        "functions": 80,
-        "lines": 80,
-        "statements": 80
-      }
-    }
   },
   "prettier": {
     "semi": true,
@@ -167,12 +142,6 @@
           "newlines-between": "always"
         }
       ]
-    }
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "npm run precommit",
-      "pre-push": "npm run validate"
     }
   }
 }

@@ -11,7 +11,7 @@ import * as certificatemanager from 'aws-cdk-lib/aws-certificatemanager';
 import { Construct } from 'constructs';
 
 // Import custom constructs
-import { VpcConstruct } from './constructs/network/vpc';
+import { VpcConstruct } from './constructs/network/network-construct';
 import { DatabaseConstruct } from './constructs/database/database-construct';
 import { EC2Deployment } from './constructs/compute/ec2-deployment';
 import { ECSDeployment } from './constructs/compute/ecs-deployment';
