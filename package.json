@@ -1,0 +1,35 @@
+// package.json
+{
+  "name": "librechat-cdk",
+  "version": "1.0.0",
+  "description": "AWS CDK deployment for LibreChat Enterprise with Bedrock, pgvector, and RAG",
+  "bin": {
+    "librechat": "bin/librechat.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "deploy": "npm run build && cdk deploy",
+    "destroy": "cdk destroy",
+    "synth": "npm run build && cdk synth",
+    "bootstrap": "cdk bootstrap",
+    "deploy:with-params": "npm run build && cdk deploy --parameters AlertEmail=$EMAIL --parameters KeyName=$KEYNAME",
+    "export-template": "npm run build && cdk synth > cloudformation-template.yaml"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.5",
+    "@types/node": "20.8.10",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "aws-cdk": "2.150.0",
+    "ts-node": "^10.9.1",
+    "typescript": "~5.2.2"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.150.0",
+    "constructs": "^10.0.0",
+    "source-map-support": "^0.5.21"
+  }
+}

@@ -1,0 +1,27 @@
+// .gitignore
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+._*
+
+# project specific
+*.js
+!jest.config.js
+*.d.ts
+node_modules/
+.npm/
+.env
+cdk.out/
+.cdk.staging/
+*.pem
+cloudformation-template.yaml
+
