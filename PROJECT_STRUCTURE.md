@@ -2,7 +2,7 @@
 
 ## 📁 Directory Overview
 
-```
+```md
 librechat-cdk/
 ├── README.md                          # Main documentation (setup, deployment, operations)
 ├── PROJECT_STRUCTURE.md              # This file - explains project organization
@@ -36,7 +36,9 @@ librechat-cdk/
 ### Infrastructure Definition
 
 #### `lib/librechat-stack.ts` (~800 lines)
+
 The heart of the project - defines all AWS resources:
+
 - **Networking**: VPC with 2 public and 2 private subnets
 - **Compute**: EC2 instance (t3.xlarge) with automated setup
 - **Database**: RDS PostgreSQL 15.7 with pgvector extension
@@ -47,6 +49,7 @@ The heart of the project - defines all AWS resources:
 - **Secrets**: Secrets Manager for database password
 
 Key sections:
+
 ```typescript
 // VPC Creation (lines ~50-70)
 const vpc = new ec2.Vpc(this, 'LibreChatVPC', {...})
@@ -59,7 +62,9 @@ const instance = new ec2.Instance(this, 'LibreChatInstance', {...})
 ```
 
 #### `bin/librechat.ts` (~40 lines)
+
 CDK application entry point that:
+
 - Imports the LibreChatStack
 - Reads context values for customization
 - Creates the stack with proper environment
@@ -68,6 +73,7 @@ CDK application entry point that:
 ### Configuration Files
 
 #### `package.json`
+
 ```json
 {
   "name": "librechat-cdk",
@@ -100,20 +106,25 @@ CDK application entry point that:
 ```
 
 #### `cdk.json`
+
 CDK configuration with:
+
 - App entry point configuration
 - Watch patterns for development
 - Feature flags for CDK best practices
 - Context defaults
 
 #### `tsconfig.json`
+
 TypeScript configuration:
+
 - Target: ES2020
 - Module: CommonJS
 - Strict mode enabled
 - Source maps for debugging
 
 #### `.gitignore`
+
 ```
 *.js
 !jest.config.js
@@ -130,7 +141,9 @@ cloudformation-template.yaml
 ### Deployment Scripts
 
 #### `scripts/deploy.sh`
+
 Interactive bash script that:
+
 1. Checks for Node.js, AWS CLI, and CDK
 2. Installs dependencies
 3. Builds the TypeScript project
@@ -140,13 +153,16 @@ Interactive bash script that:
    - Deploy via CloudFormation CLI
 
 Key functions:
+
 - `check_prerequisites()` - Validates environment
 - `install_dependencies()` - Runs npm install
 - `generate_template()` - Creates CF template
 - `deploy_cdk()` - Interactive CDK deployment
 
 #### `scripts/create-one-click-deploy.sh`
+
 Creates a shareable deployment URL:
+
 ```bash
 #!/bin/bash
 REGION=${1:-us-east-1}
@@ -156,7 +172,9 @@ REGION=${1:-us-east-1}
 ```
 
 #### `scripts/cleanup.sh`
+
 Safe resource cleanup:
+
 ```bash
 #!/bin/bash
 # Confirms deletion
@@ -167,7 +185,9 @@ Safe resource cleanup:
 ### Test Files
 
 #### `test/librechat-stack.test.ts`
+
 Jest tests that validate:
+
 - VPC has correct CIDR and subnets
 - Security groups have proper rules
 - RDS has pgvector parameter group
@@ -181,7 +201,8 @@ Jest tests that validate:
 ## 🛠️ Generated Files
 
 ### During Build
-```
+
+```md
 bin/*.js                              # Compiled JavaScript
 lib/*.js                              # Compiled JavaScript
 test/*.js                             # Compiled tests
@@ -189,7 +210,8 @@ test/*.js                             # Compiled tests
 ```
 
 ### During CDK Synth
-```
+
+```md
 cdk.out/
 ├── LibreChatStack.template.json      # CloudFormation template (~2000 lines)
 ├── LibreChatStack.assets.json        # Asset metadata
@@ -198,7 +220,8 @@ cdk.out/
 ```
 
 ### User-Generated
-```
+
+```md
 librechat-cloudformation.yaml         # From: cdk synth > filename.yaml
 librechat-parameters.json             # Created by deploy.sh
 ```
@@ -206,6 +229,7 @@ librechat-parameters.json             # Created by deploy.sh
 ## 🔧 Common Operations
 
 ### Initial Setup
+
 ```bash
 # Clone and install
 git clone <repository>
@@ -217,6 +241,7 @@ cdk bootstrap aws://ACCOUNT/REGION
 ```
 
 ### Development
+
 ```bash
 # Compile TypeScript
 npm run build
@@ -232,6 +257,7 @@ cdk diff
 ```
 
 ### Deployment
+
 ```bash
 # Interactive deployment
 ./scripts/deploy.sh
@@ -244,6 +270,7 @@ cdk synth > template.yaml
 ```
 
 ### Debugging
+
 ```bash
 # Validate synthesis
 cdk synth --quiet
@@ -258,7 +285,9 @@ cfn-lint librechat-cloudformation.yaml
 ## 📊 Key File Sections
 
 ### User Data Script (in librechat-stack.ts)
+
 The EC2 user data script (lines ~250-350) automatically:
+
 1. Installs Docker and dependencies
 2. Clones LibreChat repository
 3. Configures environment variables
@@ -267,7 +296,9 @@ The EC2 user data script (lines ~250-350) automatically:
 6. Configures Nginx
 
 ### IAM Permissions (in librechat-stack.ts)
+
 The EC2 role includes:
+
 ```typescript
 // Bedrock access (lines ~180-190)
 actions: [
@@ -286,7 +317,9 @@ actions: [
 ```
 
 ### Stack Parameters (in librechat-stack.ts)
+
 Three CloudFormation parameters:
+
 1. `AlertEmail` - For CloudWatch notifications
 2. `KeyName` - EC2 SSH key pair
 3. `AllowedSSHIP` - IP CIDR for SSH access

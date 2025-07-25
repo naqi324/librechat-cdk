@@ -10,7 +10,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import { SnsAction } from 'aws-cdk-lib/aws-cloudwatch-actions';
+import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import { Construct } from 'constructs';
 
 export interface LibreChatStackProps extends cdk.StackProps {
@@ -251,12 +251,6 @@ export class LibreChatStack extends cdk.Stack {
     });
 
     // ===== USER DATA SCRIPT =====
-    const getUserData = (dbEndpoint: string, s3BucketName: string) => {
-      return ec2.UserData.forLinux({
-        shebang: '#!/bin/bash -xe',
-      });
-    };
-
     const userData = ec2.UserData.forLinux();
     userData.addCommands(
       // Update and install dependencies
@@ -449,15 +443,19 @@ EOL`,
     }
 
     // ===== EC2 INSTANCE =====
+    // Use SSM Parameter Store to get the latest Ubuntu 22.04 AMI
+    const ubuntuAmiParameter = ec2.MachineImage.fromSsmParameter(
+      '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp3/ami-id',
+      {
+        os: ec2.OperatingSystemType.LINUX,
+        userData: userData,
+      }
+    );
+
     const instance = new ec2.Instance(this, 'LibreChatInstance', {
       vpc,
       instanceType: new ec2.InstanceType(props?.instanceType || 't3.xlarge'),
-      machineImage: ec2.MachineImage.genericLinux({
-        'us-east-1': 'ami-0e86e20dae9224db8', // Ubuntu 22.04 LTS
-        'us-west-2': 'ami-0aff18ec83b712f05',
-        'eu-west-1': 'ami-0e9085e60087ce171',
-        'eu-central-1': 'ami-0f673487d7e5f89ca',
-      }),
+      machineImage: ubuntuAmiParameter,
       vpcSubnets: {
         subnetType: ec2.SubnetType.PUBLIC,
       },

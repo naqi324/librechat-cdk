@@ -1,5 +1,5 @@
-# create-one-click-deploy.sh - Create a one-click deployment link
 #!/bin/bash
+# create-one-click-deploy.sh - Create a one-click deployment link
 
 REGION=${1:-us-east-1}
 BUCKET_NAME="librechat-templates-$(aws sts get-caller-identity --query Account --output text)"

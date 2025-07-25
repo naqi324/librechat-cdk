@@ -1,5 +1,5 @@
-# cleanup.sh - Clean up all LibreChat resources
 #!/bin/bash
+# cleanup.sh - Clean up all LibreChat resources
 
 echo "⚠️  WARNING: This will delete all LibreChat resources!"
 read -p "Are you sure? (yes/no): " CONFIRM

@@ -33,12 +33,14 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for detailed file descriptions 
 The fastest way to deploy LibreChat - no command line required!
 
 ### Step 1: Download the CDK Package
+
 ```bash
 git clone https://github.com/your-org/librechat-cdk.git
 cd librechat-cdk
 ```
 
 ### Step 2: Generate CloudFormation Template
+
 ```bash
 npm install
 npm run build
@@ -46,18 +48,20 @@ cdk synth > librechat-cloudformation.yaml
 ```
 
 ### Step 3: Deploy via AWS Console
+
 1. Go to [AWS CloudFormation Console](https://console.aws.amazon.com/cloudformation)
 2. Click **Create stack** → **With new resources**
 3. Choose **Upload a template file**
 4. Upload `librechat-cloudformation.yaml`
 5. Configure parameters:
    - **Stack name**: LibreChat-Production
-   - **AlertEmail**: your-email@domain.com
+   - **AlertEmail**: <your-email@domain.com>
    - **KeyName**: Select your EC2 key pair
    - **AllowedSSHIP**: Your IP (x.x.x.x/32)
 6. Review and create (acknowledge IAM resources)
 
 ### Step 4: Access LibreChat
+
 - Wait 15-20 minutes for deployment
 - Find the URL in CloudFormation **Outputs** tab
 - Create your first user account
@@ -76,6 +80,7 @@ Before deploying, ensure you have:
    - Download and save the .pem file
 
 3. **For CLI Deployment**:
+
    ```bash
    npm install -g aws-cdk
    aws configure
@@ -179,6 +184,7 @@ cdk deploy \
 ### Infrastructure Customization
 
 Edit `lib/librechat-stack.ts` to modify:
+
 - VPC CIDR ranges and subnet configuration
 - Instance types and storage sizes
 - Security group rules
@@ -198,15 +204,16 @@ Edit `lib/librechat-stack.ts` to modify:
 | S3 | Document storage | ~$5-20 |
 | **Total** | **Infrastructure** | **~$220-250** |
 
-
 ### Cost Optimization Tips
 
 1. **Development Environment**
+
    ```bash
    cdk deploy --context instanceType=t3.medium --context dbInstanceClass=db.t3.micro
    ```
 
 2. **Auto-Stop/Start Schedule**
+
    ```bash
    # Add to crontab for non-production
    0 19 * * 1-5 aws ec2 stop-instances --instance-ids $INSTANCE_ID
@@ -214,6 +221,7 @@ Edit `lib/librechat-stack.ts` to modify:
    ```
 
 3. **Monitor Usage**
+
    ```bash
    aws ce get-cost-and-usage \
      --time-period Start=2025-01-01,End=2025-01-31 \
@@ -240,6 +248,7 @@ After deployment completes (~20 minutes):
 1. Find the Load Balancer URL in CloudFormation Outputs
 2. Access: `http://YOUR-ALB-DNS-NAME`
 3. Create admin account:
+
    ```bash
    curl -X POST http://YOUR-ALB-DNS/api/auth/register \
      -H "Content-Type: application/json" \
@@ -253,6 +262,7 @@ After deployment completes (~20 minutes):
 ### 2. Configure HTTPS (Required for Production)
 
 #### Option A: AWS Certificate Manager with Route 53
+
 ```bash
 # Request certificate
 aws acm request-certificate \
@@ -269,6 +279,7 @@ aws elbv2 create-listener \
 ```
 
 #### Option B: Use CloudFlare
+
 - Add your domain to CloudFlare
 - Point to ALB DNS name
 - Enable "Full SSL/TLS"
@@ -282,6 +293,7 @@ aws elbv2 create-listener \
    - Create client secret
 
 2. **Update LibreChat Configuration**
+
    ```bash
    # SSH to instance
    ssh -i your-key.pem ubuntu@INSTANCE-IP
@@ -308,6 +320,7 @@ aws cloudwatch put-dashboard \
 ## 🧪 Testing & Validation
 
 ### Automated Tests
+
 ```bash
 # Run CDK unit tests
 npm test
@@ -318,6 +331,7 @@ cfn-lint librechat-cloudformation.yaml
 ```
 
 ### Manual Validation Checklist
+
 - [ ] Access LibreChat URL successfully
 - [ ] Create and login with user account
 - [ ] Select and use Bedrock models
@@ -328,6 +342,7 @@ cfn-lint librechat-cloudformation.yaml
 - [ ] Monitor costs in Cost Explorer
 
 ### Load Testing
+
 ```bash
 # Install artillery
 npm install -g artillery
@@ -354,10 +369,12 @@ docker-compose up -d
 ### Backup & Recovery
 
 Automated backups are configured for:
+
 - **RDS**: 7-day retention with point-in-time recovery
 - **S3**: Versioning enabled
 
 Manual backup:
+
 ```bash
 # Database backup
 aws rds create-db-snapshot \
@@ -371,6 +388,7 @@ aws s3 sync s3://source-bucket s3://backup-bucket
 ### Monitoring & Alerts
 
 View CloudWatch dashboards:
+
 ```bash
 # Get metrics
 aws cloudwatch get-metric-statistics \
@@ -431,11 +449,11 @@ ssh -i key.pem ubuntu@INSTANCE-IP "curl localhost:3080/health"
 
 ## 📚 Additional Resources
 
-- **LibreChat Documentation**: https://www.librechat.ai/docs
-- **AWS CDK Reference**: https://docs.aws.amazon.com/cdk/
+- **LibreChat Documentation**: <https://www.librechat.ai/docs>
+- **AWS CDK Reference**: <https://docs.aws.amazon.com/cdk/>
 - **Project Structure**: See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
-- **GitHub Issues**: https://github.com/danny-avila/LibreChat/issues
-- **Community Discord**: https://discord.librechat.ai
+- **GitHub Issues**: <https://github.com/danny-avila/LibreChat/issues>
+- **Community Discord**: <https://discord.librechat.ai>
 
 ## 🤝 Contributing
 
