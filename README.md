@@ -178,7 +178,7 @@ npm run deploy:prod -- \
 
 ### Environment Configuration
 
-Create `.env.librechat` for environment-specific settings:
+Create `.env.librechat` for environment-specific settings (optional - you can also use CDK context parameters):
 
 ```bash
 # Deployment Settings
@@ -236,11 +236,11 @@ registration:
 
 ### Advanced Configuration
 
-For detailed configuration options, see:
+For detailed configuration options, see the configuration files in this repository:
 
-- [Configuration Guide](docs/CONFIGURATION.md)
-- [Environment Variables](docs/ENVIRONMENT_VARIABLES.md)
-- [Feature Flags](docs/FEATURE_FLAGS.md)
+- `config/deployment-config.ts` - Deployment configurations
+- `config/librechat.yaml` - LibreChat application settings
+- `cdk.json` - CDK context and feature flags
 
 ## 💰 Cost Analysis
 
@@ -296,7 +296,7 @@ If you're using the original LibreChat CDK deployment:
    npm run deploy
    ```
 
-See [MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for detailed instructions.
+For detailed migration instructions, please refer to the AWS CDK migration documentation.
 
 ## 🔧 Troubleshooting
 
@@ -353,7 +353,7 @@ See [SECURITY.md](docs/SECURITY.md) for detailed security guide.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! Please follow standard open source contribution practices.
 
 ### Development Setup
 

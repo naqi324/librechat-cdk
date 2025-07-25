@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { PricingClient, GetProductsCommand } from '@aws-sdk/client-pricing';
 import { EC2Client, DescribeInstanceTypesCommand } from '@aws-sdk/client-ec2';
-import * as Table from 'cli-table3';
-import * as chalk from 'chalk';
+import Table from 'cli-table3';
+import chalk from 'chalk';
 import { DeploymentConfigBuilder, environmentConfigs } from '../config/deployment-config';
 
 interface CostEstimate {
