@@ -688,11 +688,4 @@ new ssm.CfnDocument(this, 'IncidentResponseRunbook', {
 - [ ] Review cost anomalies
 - [ ] Update security documentation
 
-## Security Contacts
-
-- **Security Team**: security@company.com
-- **Incident Response**: incident-response@company.com
-- **AWS Support**: [Create Support Case](https://console.aws.amazon.com/support/)
-- **On-Call**: +1-xxx-xxx-xxxx
-
 Remember: Security is everyone's responsibility. When in doubt, escalate!

@@ -131,7 +131,6 @@ npm run deploy:dev -- \
   -c keyPairName=my-dev-key
 ```
 
-**Cost**: ~$150/month | **Features**: Basic LibreChat without RAG
 
 ### Option 2: Production EC2
 
@@ -144,8 +143,6 @@ npm run deploy:prod -- \
   -c domainName=chat.company.com
 ```
 
-**Cost**: ~$250/month | **Features**: Full features, single instance
-
 ### Option 3: Production ECS
 
 ```bash
@@ -157,7 +154,6 @@ npm run deploy:prod -- \
   -c certificateArn=arn:aws:acm:...
 ```
 
-**Cost**: ~$400/month | **Features**: Auto-scaling, high availability
 
 ### Option 4: Enterprise
 
@@ -169,8 +165,6 @@ npm run deploy:prod -- \
   -c domainName=chat.company.com \
   -c enableSharePoint=true
 ```
-
-**Cost**: ~$800/month | **Features**: All features, multi-AZ, DocumentDB
 
 ## ⚙️ Configuration
 
@@ -242,17 +236,6 @@ For detailed configuration options, see the configuration files in this reposito
 - `cdk.json` - CDK context and feature flags
 
 ## 💰 Cost Analysis
-
-### Estimated Monthly Costs by Environment
-
-| Component | Development | Production EC2 | Production ECS | Enterprise |
-|-----------|-------------|----------------|----------------|------------|
-| Compute | $80 | $120 | $200 | $400 |
-| Database | $20 | $70 | $150 | $300 |
-| Storage | $5 | $10 | $20 | $50 |
-| Network | $15 | $30 | $50 | $100 |
-| Other | $10 | $20 | $30 | $50 |
-| **Total** | **~$130** | **~$250** | **~$450** | **~$900** |
 
 ### Cost Optimization Tips
 
@@ -384,13 +367,6 @@ docker-compose -f docker-compose.local.yml up
 
 ## 📞 Support
 
-### Getting Help
-
-- 📖 **Documentation**: Check `/docs` directory
-- 💬 **Discord**: [Join our community](https://discord.librechat.ai)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/your-org/librechat-cdk/issues)
-- 📧 **Email**: <support@librechat.ai>
-
 ### Useful Commands
 
 ```bash
@@ -415,4 +391,3 @@ aws ec2 get-console-output --instance-id INSTANCE-ID
 - [LibreChat](https://github.com/danny-avila/LibreChat) - The amazing open-source AI chat platform
 - [AWS CDK](https://aws.amazon.com/cdk/) - Infrastructure as Code framework
 - [Anthropic](https://www.anthropic.com/) - For Claude models via AWS Bedrock
-- Our amazing community of contributors
