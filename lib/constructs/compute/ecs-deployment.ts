@@ -42,12 +42,6 @@ export class ECSDeployment extends Construct {
     
     this.cluster = props.cluster;
     
-    // Service discovery namespace would be created here if needed
-    // const namespace = this.cluster.addDefaultCloudMapNamespace({
-    //   name: 'librechat.local',
-    //   vpc: props.vpc,
-    // });
-    
     // Create shared security group
     const serviceSecurityGroup = new ec2.SecurityGroup(this, 'ServiceSecurityGroup', {
       vpc: props.vpc,
@@ -287,7 +281,7 @@ export class ECSDeployment extends Construct {
     const environment: { [key: string]: string } = {
       HOST: '0.0.0.0',
       PORT: '3080',
-      DOMAIN: props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName,
+      DOMAIN: props.domainConfig?.domainName || 'localhost',
       
       // Database
       DATABASE_URL: this.buildDatabaseUrl(props),

@@ -141,6 +141,12 @@ export class LibreChatStack extends cdk.Stack {
         containerInsights: props.environment === 'production',
       });
       
+      // Add service discovery namespace
+      cluster.addDefaultCloudMapNamespace({
+        name: 'librechat.local',
+        vpc: this.vpc,
+      });
+      
       const ecsProps: any = {
         vpc: this.vpc,
         cluster: cluster,
