@@ -194,7 +194,35 @@ export class DeploymentConfigBuilder {
     }
     
     if (this.config.deploymentMode === 'EC2' && !this.config.keyPairName) {
-      throw new Error('Key pair name is required for EC2 deployment');
+      throw new Error(`
+Key pair name is required for EC2 deployment.
+
+To fix this error, you can:
+
+1. Create an EC2 key pair in AWS Console:
+   - Go to EC2 > Key Pairs
+   - Click "Create key pair"
+   - Save the private key file securely
+
+2. Then provide the key pair name using one of these methods:
+
+   a) Using environment variable:
+      export KEY_PAIR_NAME=your-key-pair-name
+      npm run deploy
+
+   b) Using CDK context:
+      npm run deploy -- -c keyPairName=your-key-pair-name
+
+   c) Using .env file:
+      echo "KEY_PAIR_NAME=your-key-pair-name" >> .env
+      npm run deploy
+
+3. Or switch to ECS deployment mode (no key pair required):
+      export DEPLOYMENT_MODE=ECS
+      npm run deploy
+
+For examples, see config/development.env.example or config/ecs-deployment.env.example
+`);
     }
     
     return this.config as LibreChatStackProps;

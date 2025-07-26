@@ -88,7 +88,7 @@
 ### Optional
 
 - 🔧 Docker Desktop (for local development)
-- 🔑 EC2 Key Pair (for SSH access)
+- 🔑 EC2 Key Pair (required for EC2 deployment mode - see [Key Pair Setup](#key-pair-setup))
 - 🌐 Domain name and SSL certificate (for HTTPS)
 - 📧 Email address for monitoring alerts
 
@@ -101,8 +101,11 @@
 git clone https://github.com/your-org/librechat-cdk.git
 cd librechat-cdk
 
-# Run the setup wizard
-./scripts/setup-environment.sh
+# Install dependencies
+npm install
+
+# Run the setup wizard to configure deployment
+./scripts/setup-deployment.sh
 ```
 
 ### 2. Deploy with Interactive Wizard
@@ -120,6 +123,61 @@ After deployment completes (15-20 minutes), you'll receive:
 - 📊 CloudWatch Dashboard URL
 - 🔑 SSH instructions (for EC2 deployments)
 
+## 🔑 Key Pair Setup
+
+EC2 deployments require an AWS key pair for SSH access. ECS deployments do NOT require a key pair.
+
+### Creating a Key Pair
+
+#### Option 1: AWS Console
+1. Go to EC2 > Key Pairs in AWS Console
+2. Click "Create key pair"
+3. Enter a name (e.g., `librechat-key`)
+4. Choose key pair type (RSA recommended)
+5. Choose file format (.pem for Linux/Mac, .ppk for Windows)
+6. Save the private key file securely
+
+#### Option 2: AWS CLI
+```bash
+aws ec2 create-key-pair \
+  --key-name librechat-key \
+  --query 'KeyMaterial' \
+  --output text > librechat-key.pem
+
+# Set proper permissions
+chmod 400 librechat-key.pem
+```
+
+### Using the Key Pair
+
+Once created, provide the key pair name during deployment:
+
+```bash
+# Method 1: Environment variable
+export KEY_PAIR_NAME=librechat-key
+npm run deploy
+
+# Method 2: CDK context
+npm run deploy -- -c keyPairName=librechat-key
+
+# Method 3: .env file
+echo "KEY_PAIR_NAME=librechat-key" >> .env
+npm run deploy
+```
+
+### Avoiding Key Pair Requirement
+
+To deploy without a key pair, use ECS deployment mode:
+
+```bash
+# Method 1: Environment variable
+export DEPLOYMENT_MODE=ECS
+npm run deploy
+
+# Method 2: Use setup script and select ECS
+./scripts/setup-deployment.sh
+```
+
 ## 🎯 Deployment Options
 
 ### Option 1: Development Environment
@@ -135,7 +193,7 @@ npm run deploy:dev -- \
 ### Option 2: Production EC2
 
 ```bash
-# Cost-optimized production
+# Cost-optimized production (requires key pair)
 npm run deploy:prod -- \
   -c configSource=production-ec2 \
   -c keyPairName=prod-key \
@@ -146,7 +204,7 @@ npm run deploy:prod -- \
 ### Option 3: Production ECS
 
 ```bash
-# Scalable production deployment
+# Scalable production deployment (no key pair required)
 npm run deploy:prod -- \
   -c configSource=production-ecs \
   -c alertEmail=ops@company.com \
