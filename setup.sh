@@ -140,7 +140,10 @@ if [ -f .env ]; then
             npm run build
             
             echo -e "\n${BLUE}🔧 Bootstrapping CDK${NC}"
-            npm run bootstrap
+            ./scripts/manage-bootstrap.sh fix || {
+                echo -e "${RED}Bootstrap failed. Run: ./scripts/manage-bootstrap.sh clean${NC}"
+                exit 1
+            }
             
             echo -e "\n${BLUE}🚀 Deploying Stack${NC}"
             npm run deploy
@@ -385,7 +388,18 @@ if [ "$deploy_now" = "y" ]; then
     echo -e "\n${BLUE}🔧 Bootstrapping CDK${NC}"
     echo "===================="
     echo "This prepares your AWS account for CDK deployments..."
-    npm run bootstrap
+    
+    # Check bootstrap status first
+    if ./scripts/manage-bootstrap.sh status &>/dev/null; then
+        echo -e "${GREEN}✅ CDK bootstrap already configured${NC}"
+    else
+        echo "Running CDK bootstrap..."
+        ./scripts/manage-bootstrap.sh fix || {
+            echo -e "${RED}Bootstrap failed. You may need to run:${NC}"
+            echo "  ./scripts/manage-bootstrap.sh clean"
+            exit 1
+        }
+    fi
     print_status "CDK bootstrap complete"
     
     # Deploy

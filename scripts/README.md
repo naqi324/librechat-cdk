@@ -6,12 +6,34 @@
 - Environment validation
 - Dependency installation
 - Interactive configuration
-- CDK bootstrap
+- CDK bootstrap (via manage-bootstrap.sh)
 - Stack deployment
 
 ## Specialized Scripts
 
 These scripts remain for specific use cases:
+
+### `manage-bootstrap.sh`
+Unified CDK bootstrap management with multiple commands:
+```bash
+# Check bootstrap status
+./scripts/manage-bootstrap.sh status
+
+# Fix bootstrap issues
+./scripts/manage-bootstrap.sh fix
+
+# Clean and re-bootstrap
+./scripts/manage-bootstrap.sh clean
+
+# Show help
+./scripts/manage-bootstrap.sh help
+```
+
+This script handles all bootstrap-related operations:
+- Checking current bootstrap status
+- Fixing common bootstrap issues
+- Cleaning up conflicting resources
+- Re-bootstrapping from scratch
 
 ### `estimate-cost.ts`
 Estimates AWS costs for different deployment configurations.
@@ -42,44 +64,22 @@ Generates a CloudFormation template for one-click deployment via AWS Console.
 ./scripts/create-one-click-deploy.sh
 ```
 
-### `fix-bootstrap.sh`
-Fixes CDK bootstrap conflicts and ECR repository issues.
+## Script Organization
+
+We've consolidated multiple bootstrap-related scripts into a single `manage-bootstrap.sh` script to reduce complexity. The previous individual scripts (check-bootstrap-status.sh, fix-bootstrap.sh, deep-clean-bootstrap.sh, force-clean-bootstrap.sh) have been removed in favor of this unified approach.
+
+## Typical Workflow
+
+1. **Initial Setup**: Run `./setup.sh` from the root directory
+2. **Bootstrap Issues**: Use `./scripts/manage-bootstrap.sh` commands
+3. **Cost Estimation**: Run `./scripts/estimate-cost.ts` before deployment
+4. **Cleanup**: Use `./scripts/cleanup.sh` to remove all resources
+
+## CI/CD Usage
+
+For automated deployments, use the `deploy.sh` script with environment variables:
 ```bash
-./scripts/fix-bootstrap.sh
+export DEPLOYMENT_MODE=ECS
+export DEPLOYMENT_ENV=production
+./scripts/deploy.sh
 ```
-Use this when you encounter bootstrap errors like "container-assets repository already exists".
-
-### `check-bootstrap-status.sh`
-Checks the current CDK bootstrap status and health.
-```bash
-./scripts/check-bootstrap-status.sh
-```
-
-### `deep-clean-bootstrap.sh`
-Performs a deep cleanup of all CDK bootstrap resources when facing persistent conflicts.
-```bash
-./scripts/deep-clean-bootstrap.sh
-```
-This script will:
-- Delete the CDKToolkit CloudFormation stack
-- Remove ECR repositories (including all images)
-- Delete S3 buckets (including all objects and versions)
-- Clean up SSM parameters
-- Check for custom bootstrap stacks
-
-### `force-clean-bootstrap.sh`
-Quick, non-interactive force cleanup and re-bootstrap.
-```bash
-./scripts/force-clean-bootstrap.sh
-```
-Use this for automated cleanup when you're sure you want to remove everything and start fresh.
-
-## Note on Removed Scripts
-
-The following scripts have been consolidated into the main `setup.sh`:
-- ~~`quickstart.sh`~~ 
-- ~~`setup-deployment.sh`~~
-- ~~`setup-environment.sh`~~
-- ~~`deploy-interactive.sh`~~
-
-All functionality from these scripts is now available in the comprehensive `./setup.sh` script in the root directory.
