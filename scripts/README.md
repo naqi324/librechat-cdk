@@ -64,6 +64,20 @@ Generates a CloudFormation template for one-click deployment via AWS Console.
 ./scripts/create-one-click-deploy.sh
 ```
 
+### `bootstrap-with-custom-qualifier.sh`
+Bootstrap CDK with a unique qualifier to avoid global S3 naming conflicts.
+```bash
+./scripts/bootstrap-with-custom-qualifier.sh
+```
+Use this when you get "bucket already exists" errors during bootstrap.
+
+### `force-s3-cleanup.sh`
+Aggressive S3 bucket cleanup for stubborn CDK bootstrap issues.
+```bash
+./scripts/force-s3-cleanup.sh
+```
+Searches multiple regions and uses various methods to find and delete CDK S3 buckets.
+
 ## Script Organization
 
 We've consolidated multiple bootstrap-related scripts into a single `manage-bootstrap.sh` script to reduce complexity. The previous individual scripts (check-bootstrap-status.sh, fix-bootstrap.sh, deep-clean-bootstrap.sh, force-clean-bootstrap.sh) have been removed in favor of this unified approach.

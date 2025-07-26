@@ -175,11 +175,37 @@ clean_bootstrap() {
         aws ecr delete-repository --repository-name $ECR_REPO --force --region $REGION 2>/dev/null || true
     fi
     
-    # Force delete S3 bucket
-    if aws s3api head-bucket --bucket $S3_BUCKET --region $REGION 2>/dev/null; then
-        echo "Deleting S3 bucket..."
-        aws s3 rm s3://$S3_BUCKET --recursive --region $REGION 2>/dev/null || true
-        aws s3 rb s3://$S3_BUCKET --force --region $REGION 2>/dev/null || true
+    # Force delete S3 bucket (check all regions since S3 is global)
+    echo "Checking for S3 bucket: $S3_BUCKET"
+    
+    # First try to get bucket location
+    BUCKET_REGION=$(aws s3api get-bucket-location --bucket $S3_BUCKET 2>/dev/null | jq -r '.LocationConstraint // "us-east-1"' || echo "")
+    
+    if [ ! -z "$BUCKET_REGION" ]; then
+        # Bucket exists somewhere
+        if [ "$BUCKET_REGION" = "null" ]; then
+            BUCKET_REGION="us-east-1"
+        fi
+        echo "Found bucket in region: $BUCKET_REGION"
+        
+        # Empty the bucket first
+        echo "Emptying bucket..."
+        aws s3 rm s3://$S3_BUCKET --recursive --region $BUCKET_REGION 2>/dev/null || true
+        
+        # Delete all versions if versioning is enabled
+        aws s3api delete-objects --bucket $S3_BUCKET --region $BUCKET_REGION \
+            --delete "$(aws s3api list-object-versions --bucket $S3_BUCKET --region $BUCKET_REGION \
+            --output json --query '{Objects: Versions[].{Key: Key, VersionId: VersionId}}' 2>/dev/null || echo '{}')" 2>/dev/null || true
+        
+        # Delete the bucket
+        echo "Deleting bucket..."
+        aws s3api delete-bucket --bucket $S3_BUCKET --region $BUCKET_REGION 2>/dev/null || true
+        aws s3 rb s3://$S3_BUCKET --force --region $BUCKET_REGION 2>/dev/null || true
+        
+        # Wait a moment for deletion to propagate
+        sleep 5
+    else
+        echo "Bucket not found or not accessible"
     fi
     
     echo -e "${GREEN}✅ Cleanup complete${NC}"
