@@ -55,6 +55,25 @@ Checks the current CDK bootstrap status and health.
 ./scripts/check-bootstrap-status.sh
 ```
 
+### `deep-clean-bootstrap.sh`
+Performs a deep cleanup of all CDK bootstrap resources when facing persistent conflicts.
+```bash
+./scripts/deep-clean-bootstrap.sh
+```
+This script will:
+- Delete the CDKToolkit CloudFormation stack
+- Remove ECR repositories (including all images)
+- Delete S3 buckets (including all objects and versions)
+- Clean up SSM parameters
+- Check for custom bootstrap stacks
+
+### `force-clean-bootstrap.sh`
+Quick, non-interactive force cleanup and re-bootstrap.
+```bash
+./scripts/force-clean-bootstrap.sh
+```
+Use this for automated cleanup when you're sure you want to remove everything and start fresh.
+
 ## Note on Removed Scripts
 
 The following scripts have been consolidated into the main `setup.sh`:
