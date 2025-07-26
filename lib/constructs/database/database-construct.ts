@@ -229,15 +229,26 @@ export class DatabaseConstruct extends Construct {
         environment: {
           POSTGRES_SECRET_ARN: this.secrets['postgres'].secretArn,
           ENABLE_PGVECTOR: String(props.enablePgVector !== false),
+          DB_HOST: this.endpoints['postgres'] || '',
+          DB_PORT: '5432',
+          DB_NAME: 'librechat',
+          DB_SECRET_ID: this.secrets['postgres'].secretArn,
         },
         timeout: cdk.Duration.minutes(5),
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
+        layers: [
+          lambda.LayerVersion.fromLayerVersionArn(
+            this,
+            'Psycopg2Layer',
+            `arn:aws:lambda:${cdk.Stack.of(this).region}:770693421928:layer:Klayers-p311-psycopg2-binary:3`
+          ),
+        ],
       });
       
       // Grant permissions
       this.secrets['postgres'].grantRead(initPostgresFunction);
-      if (this.postgresCluster && initPostgresFunction.connections.securityGroups.length > 0) {
+      if (initPostgresFunction.connections.securityGroups.length > 0) {
         this.securityGroups['postgres'].addIngressRule(
           initPostgresFunction.connections.securityGroups[0]!,
           ec2.Port.tcp(5432),

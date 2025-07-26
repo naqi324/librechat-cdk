@@ -36,14 +36,32 @@ check_resource() {
 
 # Check CloudFormation stacks
 echo -e "\n${BLUE}Checking CloudFormation Stacks...${NC}"
-STACKS=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED --query "StackSummaries[?contains(StackName, 'LibreChat')].StackName" --output text 2>/dev/null || echo "")
+STACKS=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED ROLLBACK_COMPLETE --query "StackSummaries[?contains(StackName, 'LibreChat') || contains(StackName, 'CDKToolkit')].{Name:StackName,Status:StackStatus}" --output text 2>/dev/null || echo "")
+STACK_COUNT=0
 if [ ! -z "$STACKS" ]; then
     echo -e "${YELLOW}Found stacks:${NC}"
-    for stack in $STACKS; do
-        echo "  - $stack"
-    done
+    while IFS=$'\t' read -r stack_name stack_status; do
+        if [ ! -z "$stack_name" ]; then
+            echo "  - $stack_name (Status: $stack_status)"
+            # Check if it's a nested stack
+            PARENT_ID=$(aws cloudformation describe-stacks --stack-name "$stack_name" --query 'Stacks[0].ParentId' --output text 2>/dev/null || echo "")
+            if [ ! -z "$PARENT_ID" ] && [ "$PARENT_ID" != "None" ]; then
+                echo "    └─ Nested stack (Parent: ${PARENT_ID##*/})"
+            fi
+            STACK_COUNT=$((STACK_COUNT + 1))
+        fi
+    done <<< "$STACKS"
 else
     echo -e "${GREEN}✅ No LibreChat stacks found${NC}"
+fi
+
+# Also check for CDK bootstrap stacks
+CDK_STACKS=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?contains(StackName, 'CDKToolkit')].StackName" --output text 2>/dev/null || echo "")
+if [ ! -z "$CDK_STACKS" ]; then
+    echo -e "${BLUE}CDK Bootstrap stacks:${NC}"
+    for stack in $CDK_STACKS; do
+        echo "  - $stack"
+    done
 fi
 
 # Check ECS resources
@@ -116,15 +134,49 @@ LOG_GROUPS=$(aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/L
 LOG_COUNT=$(echo "$LOG_GROUPS" | wc -w)
 check_resource "CloudWatch log groups" $LOG_COUNT
 
+# Check EFS File Systems
+echo -e "\n${BLUE}Checking EFS File Systems...${NC}"
+EFS_SYSTEMS=$(aws efs describe-file-systems --query "FileSystems[?contains(Name, 'librechat') || contains(Name, 'LibreChat')].FileSystemId" --output text 2>/dev/null || echo "")
+EFS_COUNT=$(echo "$EFS_SYSTEMS" | wc -w)
+check_resource "EFS file systems" $EFS_COUNT
+
+# Check VPC Resources
+echo -e "\n${BLUE}Checking VPC Resources...${NC}"
+VPC_IDS=$(aws ec2 describe-vpcs --filters "Name=tag:aws:cloudformation:stack-name,Values=LibreChatStack-*" --query 'Vpcs[].VpcId' --output text 2>/dev/null || echo "")
+VPC_COUNT=$(echo "$VPC_IDS" | wc -w)
+check_resource "VPCs" $VPC_COUNT
+
+# Check NAT Gateways
+NAT_GATEWAYS=$(aws ec2 describe-nat-gateways --filter "Name=tag:aws:cloudformation:stack-name,Values=LibreChatStack-*" "Name=state,Values=available,pending" --query 'NatGateways[].NatGatewayId' --output text 2>/dev/null || echo "")
+NAT_COUNT=$(echo "$NAT_GATEWAYS" | wc -w)
+check_resource "NAT Gateways" $NAT_COUNT
+if [ "$NAT_COUNT" -gt 0 ]; then
+    echo -e "${RED}  ⚠️  NAT Gateways cost ~$45/month each!${NC}"
+fi
+
+# Check Elastic IPs
+ELASTIC_IPS=$(aws ec2 describe-addresses --filters "Name=tag:aws:cloudformation:stack-name,Values=LibreChatStack-*" --query 'Addresses[].AllocationId' --output text 2>/dev/null || echo "")
+EIP_COUNT=$(echo "$ELASTIC_IPS" | wc -w)
+check_resource "Elastic IPs" $EIP_COUNT
+
 # Summary
 echo -e "\n${BLUE}Summary${NC}"
 echo "======="
-TOTAL_RESOURCES=$((CLUSTER_COUNT + TASK_DEF_COUNT + INSTANCE_COUNT + RDS_COUNT + BUCKET_COUNT + REPO_COUNT + ROLE_COUNT + SG_COUNT + LOG_COUNT))
+TOTAL_RESOURCES=$((CLUSTER_COUNT + TASK_DEF_COUNT + INSTANCE_COUNT + RDS_COUNT + BUCKET_COUNT + REPO_COUNT + ROLE_COUNT + SG_COUNT + LOG_COUNT + EFS_COUNT + VPC_COUNT + NAT_COUNT + EIP_COUNT))
 
 if [ "$TOTAL_RESOURCES" -eq 0 ]; then
     echo -e "${GREEN}✅ No LibreChat resources found. Environment is clean!${NC}"
 else
     echo -e "${YELLOW}⚠️  Found $TOTAL_RESOURCES LibreChat-related resources${NC}"
+    
+    # Highlight expensive resources
+    if [ "$NAT_COUNT" -gt 0 ]; then
+        echo -e "${RED}⚠️  WARNING: $NAT_COUNT NAT Gateway(s) found - these cost ~$45/month each!${NC}"
+    fi
+    if [ "$EIP_COUNT" -gt 0 ]; then
+        echo -e "${YELLOW}⚠️  NOTE: $EIP_COUNT Elastic IP(s) found - these cost money when not attached${NC}"
+    fi
+    
     echo
     echo "To clean up all resources, run:"
     echo "  ./scripts/cleanup.sh"

@@ -52,12 +52,35 @@ Removes all deployed resources and performs thorough cleanup of the AWS account.
 ```
 **Warning:** This will delete all resources created by the stack!
 
-Enhanced cleanup includes:
-- CloudFormation stack deletion
-- CloudWatch Log Groups cleanup
-- Orphaned IAM roles removal
-- Orphaned security groups cleanup
-- Local build files cleanup (optional)
+Comprehensive cleanup includes:
+
+**COMPUTE:**
+- EC2 instances
+- ECS clusters, services, tasks, and task definitions
+- Lambda functions
+
+**STORAGE:**
+- S3 buckets (with all objects and versions)
+- EFS file systems and mount targets
+- ECR repositories
+
+**NETWORK:**
+- VPCs and subnets
+- NAT Gateways (saves ~$45/month each!)
+- Internet Gateways
+- Elastic IPs
+- Route tables
+- VPC Endpoints
+- Security groups
+
+**DATABASE:**
+- RDS instances and clusters
+- DocumentDB clusters
+
+**MONITORING & IAM:**
+- CloudWatch Log Groups
+- IAM roles and policies
+- Local build files (optional)
 
 ### `deploy.sh`
 Advanced deployment script for CI/CD pipelines. Use this when you need:
@@ -98,7 +121,7 @@ Comprehensive check for all LibreChat CDK resources in your AWS account.
 ./scripts/check-resources.sh
 ```
 Checks for:
-- CloudFormation stacks
+- CloudFormation stacks (including nested stacks)
 - ECS clusters, services, and task definitions
 - EC2 instances
 - RDS databases and clusters
@@ -107,6 +130,17 @@ Checks for:
 - IAM roles
 - Security groups
 - CloudWatch log groups
+
+### `force-stack-cleanup.sh`
+Force cleanup of stubborn CloudFormation stacks that fail to delete.
+```bash
+./scripts/force-stack-cleanup.sh <stack-name>
+```
+This script:
+- Identifies resources blocking stack deletion
+- Manually deletes problematic resources (S3 buckets, ECR repos, etc.)
+- Retries stack deletion
+- Useful for DELETE_FAILED stacks
 
 ## Script Organization
 
