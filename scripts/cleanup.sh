@@ -113,6 +113,71 @@ if [ ! -z "$LAMBDA_ROLES" ]; then
     done
 fi
 
+# Clean up ECS resources
+echo "Checking for ECS resources..."
+
+# List and delete ECS services
+ECS_CLUSTERS=$(aws ecs list-clusters --query 'clusterArns[]' --output text 2>/dev/null || echo "")
+if [ ! -z "$ECS_CLUSTERS" ]; then
+    for cluster_arn in $ECS_CLUSTERS; do
+        CLUSTER_NAME=$(echo $cluster_arn | rev | cut -d'/' -f1 | rev)
+        if [[ "$CLUSTER_NAME" == *"LibreChat"* ]] || [[ "$CLUSTER_NAME" == *"$ENVIRONMENT"* ]]; then
+            echo "  Found ECS cluster: $CLUSTER_NAME"
+            
+            # List and delete services in the cluster
+            SERVICES=$(aws ecs list-services --cluster "$cluster_arn" --query 'serviceArns[]' --output text 2>/dev/null || echo "")
+            if [ ! -z "$SERVICES" ]; then
+                for service_arn in $SERVICES; do
+                    SERVICE_NAME=$(echo $service_arn | rev | cut -d'/' -f1 | rev)
+                    echo "    Deleting service: $SERVICE_NAME"
+                    # Update desired count to 0
+                    aws ecs update-service --cluster "$cluster_arn" --service "$SERVICE_NAME" --desired-count 0 2>/dev/null || true
+                    # Delete the service
+                    aws ecs delete-service --cluster "$cluster_arn" --service "$SERVICE_NAME" --force 2>/dev/null || true
+                done
+                
+                # Wait for services to be deleted
+                echo "    Waiting for services to be deleted..."
+                sleep 10
+            fi
+            
+            # List and stop tasks
+            TASKS=$(aws ecs list-tasks --cluster "$cluster_arn" --query 'taskArns[]' --output text 2>/dev/null || echo "")
+            if [ ! -z "$TASKS" ]; then
+                echo "    Stopping running tasks..."
+                for task_arn in $TASKS; do
+                    aws ecs stop-task --cluster "$cluster_arn" --task "$task_arn" 2>/dev/null || true
+                done
+                sleep 5
+            fi
+            
+            # Delete the cluster
+            echo "    Deleting cluster: $CLUSTER_NAME"
+            aws ecs delete-cluster --cluster "$cluster_arn" 2>/dev/null || true
+        fi
+    done
+fi
+
+# Clean up ECS task definitions
+echo "Checking for ECS task definitions..."
+TASK_DEFS=$(aws ecs list-task-definitions --family-prefix "LibreChat" --query 'taskDefinitionArns[]' --output text 2>/dev/null || echo "")
+if [ ! -z "$TASK_DEFS" ]; then
+    for task_def in $TASK_DEFS; do
+        echo "  Deregistering task definition: $task_def"
+        aws ecs deregister-task-definition --task-definition "$task_def" 2>/dev/null || true
+    done
+fi
+
+# Clean up ECR repositories (from ECS deployments)
+echo "Checking for ECR repositories..."
+ECR_REPOS=$(aws ecr describe-repositories --query "repositories[?contains(repositoryName, 'librechat')].repositoryName" --output text 2>/dev/null || echo "")
+if [ ! -z "$ECR_REPOS" ]; then
+    for repo in $ECR_REPOS; do
+        echo "  Deleting ECR repository: $repo"
+        aws ecr delete-repository --repository-name "$repo" --force 2>/dev/null || true
+    done
+fi
+
 # Clean up security groups (sometimes they stick around)
 echo "Checking for orphaned security groups..."
 SG_IDS=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=LibreChatStack-*" --query 'SecurityGroups[].GroupId' --output text 2>/dev/null || echo "")
@@ -127,6 +192,9 @@ echo -e "\n${GREEN}✅ Cleanup complete!${NC}"
 echo
 echo "The following have been deleted:"
 echo "  - All compute resources (EC2/ECS)"
+echo "  - ECS clusters, services, and tasks"
+echo "  - ECS task definitions"
+echo "  - ECR repositories"
 echo "  - All databases"
 echo "  - All storage buckets"
 echo "  - All networking resources"

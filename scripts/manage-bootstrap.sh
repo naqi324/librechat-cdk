@@ -208,6 +208,18 @@ clean_bootstrap() {
         echo "Bucket not found or not accessible"
     fi
     
+    # Also check for ECS-related CDK resources
+    echo "Checking for CDK-related ECS resources..."
+    
+    # Clean up any CDK-related ECR repositories that might block bootstrap
+    CDK_ECR_REPOS=$(aws ecr describe-repositories --query "repositories[?contains(repositoryName, 'cdk-${DEFAULT_QUALIFIER}')].repositoryName" --output text 2>/dev/null || echo "")
+    if [ ! -z "$CDK_ECR_REPOS" ]; then
+        for repo in $CDK_ECR_REPOS; do
+            echo "  Deleting ECR repository: $repo"
+            aws ecr delete-repository --repository-name "$repo" --force 2>/dev/null || true
+        done
+    fi
+    
     echo -e "${GREEN}✅ Cleanup complete${NC}"
     echo
     echo -e "${BLUE}Running fresh bootstrap...${NC}"

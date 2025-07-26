@@ -92,6 +92,22 @@ Acknowledge CDK CLI notices to suppress them in future runs.
 ```
 Acknowledges notices 34892 (telemetry) and 32775 (version divergence).
 
+### `check-resources.sh`
+Comprehensive check for all LibreChat CDK resources in your AWS account.
+```bash
+./scripts/check-resources.sh
+```
+Checks for:
+- CloudFormation stacks
+- ECS clusters, services, and task definitions
+- EC2 instances
+- RDS databases and clusters
+- S3 buckets
+- ECR repositories
+- IAM roles
+- Security groups
+- CloudWatch log groups
+
 ## Script Organization
 
 We've consolidated multiple bootstrap-related scripts into a single `manage-bootstrap.sh` script to reduce complexity. The previous individual scripts (check-bootstrap-status.sh, fix-bootstrap.sh, deep-clean-bootstrap.sh, force-clean-bootstrap.sh) have been removed in favor of this unified approach.
