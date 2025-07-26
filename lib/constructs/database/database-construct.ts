@@ -76,6 +76,7 @@ export class DatabaseConstruct extends Construct {
         'work_mem': '256MB',
         'min_wal_size': '1GB',
         'max_wal_size': '4GB',
+        'rds.force_ssl': '1',
       },
     });
     
@@ -139,6 +140,7 @@ export class DatabaseConstruct extends Construct {
       parameters: {
         'shared_preload_libraries': 'pgvector',
         'max_connections': '100',
+        'rds.force_ssl': '1',
       },
     });
     

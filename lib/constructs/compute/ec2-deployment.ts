@@ -77,7 +77,7 @@ export class EC2Deployment extends Construct {
     const sg = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for LibreChat ALB',
-      allowAllOutbound: true,
+      allowAllOutbound: false,
     });
     
     sg.addIngressRule(
@@ -94,6 +94,13 @@ export class EC2Deployment extends Construct {
       );
     }
     
+    // Add outbound rule to allow traffic to EC2 instance
+    sg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(3080),
+      'Allow traffic to EC2 instance'
+    );
+    
     return sg;
   }
   
@@ -101,8 +108,28 @@ export class EC2Deployment extends Construct {
     const sg = new ec2.SecurityGroup(this, 'InstanceSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for LibreChat EC2 instance',
-      allowAllOutbound: true,
+      allowAllOutbound: false,
     });
+    
+    // Add specific outbound rules
+    sg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'Allow HTTPS outbound for package downloads and API calls'
+    );
+    
+    sg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(80),
+      'Allow HTTP outbound for package downloads'
+    );
+    
+    // Allow DNS resolution
+    sg.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'Allow DNS resolution'
+    );
     
     // Allow SSH from specified IPs
     props.allowedIps.forEach((ip, index) => {
@@ -165,16 +192,29 @@ export class EC2Deployment extends Construct {
       ],
     }));
     
-    // Add Bedrock permissions
+    // Add Bedrock permissions with least privilege
     role.addToPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
+      ],
+      resources: [
+        `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/anthropic.claude-*`,
+        `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/amazon.titan-*`,
+        `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/meta.llama*`,
+        `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/mistral.*`,
+      ],
+    }));
+    
+    // Add separate permission for listing models
+    role.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
         'bedrock:ListFoundationModels',
         'bedrock:GetFoundationModel',
       ],
-      resources: ['*'],
+      resources: ['*'], // These actions require wildcard
     }));
     
     // Add Secrets Manager permissions
@@ -190,7 +230,7 @@ export class EC2Deployment extends Construct {
       ],
     }));
     
-    // Add CloudWatch Logs permissions
+    // Add CloudWatch Logs permissions with least privilege
     role.addToPolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
@@ -199,7 +239,10 @@ export class EC2Deployment extends Construct {
         'logs:PutLogEvents',
         'logs:DescribeLogStreams',
       ],
-      resources: ['*'],
+      resources: [
+        `arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:log-group:/aws/ec2/librechat:*`,
+        `arn:aws:logs:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:log-group:/aws/ssm/*`,
+      ],
     }));
     
     return role;
@@ -231,6 +274,9 @@ export class EC2Deployment extends Construct {
       'mkdir -p /opt/librechat',
       'cd /opt/librechat',
       
+      // Download RDS certificate for SSL connection
+      'wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-2019-root.pem',
+      
       // Get secrets
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json`,
@@ -242,7 +288,7 @@ export class EC2Deployment extends Construct {
       `DOMAIN=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}`,
       '',
       '# Database',
-      `DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password)@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require`,
+      `DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password)@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem`,
       '',
       '# AWS',
       `AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}`,

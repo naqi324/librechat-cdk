@@ -223,7 +223,7 @@ export class LibreChatStack extends cdk.Stack {
   }
   
   private createApplicationSecrets(): secretsmanager.ISecret {
-    return new secretsmanager.Secret(this, 'AppSecrets', {
+    const secret = new secretsmanager.Secret(this, 'AppSecrets', {
       description: 'LibreChat application secrets',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({}),
@@ -232,6 +232,13 @@ export class LibreChatStack extends cdk.Stack {
         passwordLength: 32,
       },
     });
+    
+    // Note: Secret rotation would be added here for production environments
+    // secret.addRotationSchedule('AppSecretRotation', {
+    //   automaticallyAfter: cdk.Duration.days(90),
+    // });
+    
+    return secret;
   }
   
   private createOutputs(deployment: EC2Deployment | ECSDeployment, _database: DatabaseConstruct): void {
