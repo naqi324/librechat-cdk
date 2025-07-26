@@ -42,6 +42,19 @@ Generates a CloudFormation template for one-click deployment via AWS Console.
 ./scripts/create-one-click-deploy.sh
 ```
 
+### `fix-bootstrap.sh`
+Fixes CDK bootstrap conflicts and ECR repository issues.
+```bash
+./scripts/fix-bootstrap.sh
+```
+Use this when you encounter bootstrap errors like "container-assets repository already exists".
+
+### `check-bootstrap-status.sh`
+Checks the current CDK bootstrap status and health.
+```bash
+./scripts/check-bootstrap-status.sh
+```
+
 ## Note on Removed Scripts
 
 The following scripts have been consolidated into the main `setup.sh`:
