@@ -112,6 +112,10 @@ else
     print_status "AWS CDK CLI found"
 fi
 
+# Acknowledge CDK notices
+npx cdk acknowledge 34892 2>/dev/null || true
+npx cdk acknowledge 32775 2>/dev/null || true
+
 # Check for existing configuration
 if [ -f .env ]; then
     echo -e "\n${YELLOW}⚠️  Existing Configuration Found${NC}"

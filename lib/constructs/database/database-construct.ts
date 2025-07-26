@@ -60,9 +60,8 @@ export class DatabaseConstruct extends Construct {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_15_5,
       }),
-      description: 'Parameter group with pgvector support',
+      description: 'Parameter group for LibreChat',
       parameters: {
-        'shared_preload_libraries': 'pgvector',
         'max_connections': '200',
         'shared_buffers': '{DBInstanceClassMemory/10922}',
         'effective_cache_size': '{DBInstanceClassMemory/10922*3}',
@@ -135,9 +134,8 @@ export class DatabaseConstruct extends Construct {
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_15_7,
       }),
-      description: 'Parameter group with pgvector support',
+      description: 'Parameter group for LibreChat',
       parameters: {
-        'shared_preload_libraries': 'pgvector',
         'max_connections': '100',
         'rds.force_ssl': '1',
       },

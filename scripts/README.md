@@ -46,11 +46,18 @@ node scripts/estimate-cost.js
 ```
 
 ### `cleanup.sh`
-Removes all deployed resources and cleans up the AWS account.
+Removes all deployed resources and performs thorough cleanup of the AWS account.
 ```bash
 ./scripts/cleanup.sh
 ```
 **Warning:** This will delete all resources created by the stack!
+
+Enhanced cleanup includes:
+- CloudFormation stack deletion
+- CloudWatch Log Groups cleanup
+- Orphaned IAM roles removal
+- Orphaned security groups cleanup
+- Local build files cleanup (optional)
 
 ### `deploy.sh`
 Advanced deployment script for CI/CD pipelines. Use this when you need:
@@ -77,6 +84,13 @@ Aggressive S3 bucket cleanup for stubborn CDK bootstrap issues.
 ./scripts/force-s3-cleanup.sh
 ```
 Searches multiple regions and uses various methods to find and delete CDK S3 buckets.
+
+### `acknowledge-cdk-notices.sh`
+Acknowledge CDK CLI notices to suppress them in future runs.
+```bash
+./scripts/acknowledge-cdk-notices.sh
+```
+Acknowledges notices 34892 (telemetry) and 32775 (version divergence).
 
 ## Script Organization
 
