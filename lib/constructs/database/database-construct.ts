@@ -221,7 +221,15 @@ export class DatabaseConstruct extends Construct {
       const initPostgresFunction = new lambda.Function(this, 'InitPostgresFunction', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_postgres.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres'), {
+          bundling: {
+            image: lambda.Runtime.PYTHON_3_11.bundlingImage,
+            command: [
+              'bash', '-c',
+              'pip install -r requirements.txt -t /asset-output && cp -au . /asset-output'
+            ],
+          },
+        }),
         vpc: props.vpc,
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -237,13 +245,6 @@ export class DatabaseConstruct extends Construct {
         timeout: cdk.Duration.minutes(5),
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
-        layers: [
-          lambda.LayerVersion.fromLayerVersionArn(
-            this,
-            'Psycopg2Layer',
-            `arn:aws:lambda:${cdk.Stack.of(this).region}:770693421928:layer:Klayers-p311-psycopg2-binary:3`
-          ),
-        ],
       });
       
       // Grant permissions

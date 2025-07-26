@@ -124,6 +124,12 @@ layers/**/python/
 layers/**/*.zip
 !layers/**/requirements.txt
 
+# Lambda build artifacts
+lambda/*/package/
+lambda/*/python/
+lambda/*/*.zip
+lambda/*/lambda-package.zip
+
 # Docker
 .dockerignore
 docker-compose.override.yml
