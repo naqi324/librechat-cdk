@@ -4,15 +4,18 @@
 
 ```md
 librechat-cdk/
-├── README.md                          # Main documentation (setup, deployment, operations)
+├── setup.sh                          # Main setup and deployment script
+├── README.md                         # Main documentation (setup, deployment, operations)
+├── DEPLOYMENT_GUIDE.md               # Detailed deployment instructions
 ├── PROJECT_STRUCTURE.md              # This file - explains project organization
-├── package.json                       # Node.js dependencies and npm scripts
+├── package.json                      # Node.js dependencies and npm scripts
 ├── package-lock.json                 # (Generated) Locked dependency versions
 ├── tsconfig.json                      # TypeScript compiler configuration
 ├── cdk.json                          # CDK app configuration and feature flags
 ├── jest.config.js                    # Jest testing framework configuration
 ├── docker-compose.yaml               # Docker compose configuration for local dev
 ├── .gitignore                        # Git ignore patterns
+├── .env.example                      # Environment variables template
 │
 ├── bin/
 │   └── librechat.ts                  # CDK app entry point - instantiates stack
@@ -33,13 +36,18 @@ librechat-cdk/
 │           └── storage-construct.ts  # S3 buckets and EFS configuration
 │
 ├── config/
-│   └── deployment-config.ts          # Deployment configuration definitions
+│   ├── deployment-config.ts          # Deployment configuration builder
+│   ├── librechat.yaml               # LibreChat application configuration
+│   ├── development.env.example      # Development environment example
+│   └── ecs-deployment.env.example   # ECS deployment example
 │
 ├── lambda/                           # Lambda functions for initialization
 │   ├── init-postgres/
-│   │   └── init_postgres.py          # PostgreSQL initialization with pgvector
+│   │   ├── init_postgres.py          # PostgreSQL initialization with pgvector
+│   │   └── requirements.txt          # Python dependencies
 │   └── init-docdb/
-│       └── init_docdb.py             # DocumentDB initialization
+│       ├── init_docdb.py             # DocumentDB initialization
+│       └── requirements.txt          # Python dependencies
 │
 ├── docs/                             # Additional documentation
 │   ├── SECURITY.md                   # Security best practices and features
@@ -49,14 +57,11 @@ librechat-cdk/
 │   └── librechat-stack.test.ts       # Unit tests for CDK stack
 │
 ├── scripts/                          # Utility scripts for deployment
-│   ├── deploy.sh                     # Basic deployment script
-│   ├── deploy-interactive.sh         # Interactive deployment wizard
-│   ├── setup-environment.sh          # Initial environment setup
-│   ├── create-one-click-deploy.sh    # Generate shareable console URL
+│   ├── README.md                     # Scripts documentation
 │   ├── cleanup.sh                    # Remove all AWS resources
+│   ├── deploy.sh                     # CI/CD deployment script
+│   ├── create-one-click-deploy.sh    # Generate CloudFormation template
 │   └── estimate-cost.ts              # TypeScript cost estimation tool
-│
-├── generated/                        # (Generated) Auto-generated files
 │
 └── cdk.out/                          # (Generated) CDK synthesis output
     └── LibreChatStack.template.json  # Generated CloudFormation template

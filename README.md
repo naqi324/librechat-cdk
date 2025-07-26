@@ -94,28 +94,25 @@
 
 ## 🚀 Quick Start
 
-### 1. Clone and Setup
-
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/librechat-cdk.git
 cd librechat-cdk
 
-# Install dependencies
-npm install
-
-# Run the setup wizard to configure deployment
-./scripts/setup-deployment.sh
+# Run the setup script (handles everything from setup to deployment)
+./setup.sh
 ```
 
-### 2. Deploy with Interactive Wizard
+The setup script will:
+- ✅ Check prerequisites
+- ✅ Install dependencies
+- ✅ Configure your deployment
+- ✅ Bootstrap AWS CDK
+- ✅ Deploy your stack
 
-```bash
-# Launch the deployment wizard
-npm run wizard
-```
+For manual deployment or advanced configuration, see the [Deployment Guide](DEPLOYMENT_GUIDE.md).
 
-### 3. Access LibreChat
+### 2. Access LibreChat
 
 After deployment completes (15-20 minutes), you'll receive:
 

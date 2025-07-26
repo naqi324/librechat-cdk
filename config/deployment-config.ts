@@ -290,10 +290,14 @@ export const presetConfigs = {
 // Export helper function to get config from environment
 export function getConfigFromEnvironment(): LibreChatStackProps {
   const env = process.env.DEPLOYMENT_ENV || 'development';
-  const mode = process.env.DEPLOYMENT_MODE as 'EC2' | 'ECS' || 'EC2';
+  const mode = process.env.DEPLOYMENT_MODE as 'EC2' | 'ECS' | undefined;
   
-  const builder = new DeploymentConfigBuilder(env as keyof typeof environmentConfigs)
-    .withDeploymentMode(mode);
+  const builder = new DeploymentConfigBuilder(env as keyof typeof environmentConfigs);
+  
+  // Override deployment mode if specified in environment
+  if (mode) {
+    builder.withDeploymentMode(mode);
+  }
   
   // Apply environment variables
   if (process.env.KEY_PAIR_NAME) {

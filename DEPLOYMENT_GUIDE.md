@@ -2,13 +2,18 @@
 
 ## Quick Start
 
-The easiest way to get started is to run the setup wizard:
+The easiest way to get started is to run the setup script:
 
 ```bash
-./scripts/setup-deployment.sh
+./setup.sh
 ```
 
-This will guide you through configuration and create a `.env` file with your settings.
+This comprehensive script will:
+- Check all prerequisites
+- Install dependencies
+- Guide you through configuration
+- Create a `.env` file with your settings
+- Optionally deploy your stack immediately
 
 ## Key Pair Requirements
 

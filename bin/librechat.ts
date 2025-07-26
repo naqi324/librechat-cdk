@@ -8,6 +8,13 @@ import {
   getConfigFromEnvironment 
 } from '../config/deployment-config';
 
+// Load environment variables from .env file if it exists
+try {
+  require('dotenv').config();
+} catch (e) {
+  // dotenv is optional, ignore if not installed
+}
+
 const app = new cdk.App();
 
 // Determine configuration source
