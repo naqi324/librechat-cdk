@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { PricingClient, GetProductsCommand } from '@aws-sdk/client-pricing';
-import { EC2Client, DescribeInstanceTypesCommand } from '@aws-sdk/client-ec2';
+import { PricingClient } from '@aws-sdk/client-pricing';
+import { EC2Client } from '@aws-sdk/client-ec2';
 import Table from 'cli-table3';
 import chalk from 'chalk';
-import { DeploymentConfigBuilder, environmentConfigs } from '../config/deployment-config';
+import { environmentConfigs } from '../config/deployment-config';
 
 interface CostEstimate {
   service: string;
@@ -17,15 +17,12 @@ interface CostEstimate {
 }
 
 class CostEstimator {
-  private pricingClient: PricingClient;
-  private ec2Client: EC2Client;
   private readonly HOURS_PER_MONTH = 730; // Average hours in a month
-  private region: string;
 
   constructor(region: string = 'us-east-1') {
-    this.region = region;
-    this.pricingClient = new PricingClient({ region: 'us-east-1' }); // Pricing API only available in us-east-1
-    this.ec2Client = new EC2Client({ region });
+    // Clients would be initialized here if needed
+    new PricingClient({ region: 'us-east-1' }); // Pricing API only available in us-east-1
+    new EC2Client({ region });
   }
 
   async estimateForEnvironment(environment: keyof typeof environmentConfigs): Promise<CostEstimate[]> {
@@ -538,10 +535,15 @@ class CostEstimator {
     Array.from(allServices).sort().forEach(service => {
       const row = [service];
       environments.forEach(env => {
-        const serviceCost = allEstimates[env]
-          .filter(est => est.service === service)
-          .reduce((sum, est) => sum + est.monthlyCost, 0);
-        row.push(serviceCost > 0 ? chalk.green(`$${serviceCost.toFixed(2)}`) : '-');
+        const estimates = allEstimates[env];
+        if (estimates) {
+          const serviceCost = estimates
+            .filter(est => est.service === service)
+            .reduce((sum, est) => sum + est.monthlyCost, 0);
+          row.push(serviceCost > 0 ? chalk.green(`$${serviceCost.toFixed(2)}`) : '-');
+        } else {
+          row.push('-');
+        }
       });
       table.push(row);
     });
@@ -549,9 +551,9 @@ class CostEstimator {
     // Add totals row
     table.push([
       chalk.bold('TOTAL'),
-      chalk.bold.green(`$${totals.development.toFixed(2)}`),
-      chalk.bold.green(`$${totals.staging.toFixed(2)}`),
-      chalk.bold.green(`$${totals.production.toFixed(2)}`),
+      chalk.bold.green(`$${(totals.development || 0).toFixed(2)}`),
+      chalk.bold.green(`$${(totals.staging || 0).toFixed(2)}`),
+      chalk.bold.green(`$${(totals.production || 0).toFixed(2)}`),
     ]);
 
     console.log(table.toString());
@@ -559,7 +561,8 @@ class CostEstimator {
     // Annual comparison
     console.log('\n' + chalk.bold('Annual Cost Comparison:'));
     environments.forEach(env => {
-      const annual = totals[env] * 12;
+      const monthlyTotal = totals[env] || 0;
+      const annual = monthlyTotal * 12;
       console.log(`  ${env.padEnd(15)} ${chalk.green(`$${annual.toFixed(2)}`)}`);
     });
   }

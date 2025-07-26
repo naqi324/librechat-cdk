@@ -86,8 +86,6 @@ export const defaultConfig: Partial<LibreChatStackProps> = {
   environment: 'development',
   deploymentMode: 'EC2',
   allowedIps: ['0.0.0.0/0'],
-  keyPairName: undefined, // Must be provided
-  alertEmail: undefined, // Optional
 };
 
 // Configuration builder
@@ -108,7 +106,9 @@ export class DeploymentConfigBuilder {
   }
   
   withVpc(vpcConfig: LibreChatStackProps['vpcConfig']): this {
-    this.config.vpcConfig = vpcConfig;
+    if (vpcConfig) {
+      this.config.vpcConfig = vpcConfig;
+    }
     return this;
   }
   
@@ -121,21 +121,28 @@ export class DeploymentConfigBuilder {
   }
   
   withDomain(domainName: string, certificateArn?: string, hostedZoneId?: string): this {
-    this.config.domainConfig = {
-      domainName,
-      certificateArn,
-      hostedZoneId,
-    };
+    const domainConfig: NonNullable<LibreChatStackProps['domainConfig']> = { domainName };
+    if (certificateArn !== undefined) {
+      domainConfig.certificateArn = certificateArn;
+    }
+    if (hostedZoneId !== undefined) {
+      domainConfig.hostedZoneId = hostedZoneId;
+    }
+    this.config.domainConfig = domainConfig;
     return this;
   }
   
   withDatabase(databaseConfig: LibreChatStackProps['databaseConfig']): this {
-    this.config.databaseConfig = databaseConfig;
+    if (databaseConfig) {
+      this.config.databaseConfig = databaseConfig;
+    }
     return this;
   }
   
   withCompute(computeConfig: LibreChatStackProps['computeConfig']): this {
-    this.config.computeConfig = computeConfig;
+    if (computeConfig) {
+      this.config.computeConfig = computeConfig;
+    }
     return this;
   }
   
@@ -214,7 +221,7 @@ export const presetConfigs = {
   productionEC2: new DeploymentConfigBuilder('production')
     .withDeploymentMode('EC2')
     .withCompute({ instanceType: 't3.xlarge' })
-    .withDatabaseConfig({
+    .withDatabase({
       engine: 'postgres',
       instanceClass: 'db.t3.medium',
       allocatedStorage: 100,
@@ -233,7 +240,7 @@ export const presetConfigs = {
   // Enterprise production
   enterprise: new DeploymentConfigBuilder('production')
     .withDeploymentMode('ECS')
-    .withDatabaseConfig({
+    .withDatabase({
       engine: 'postgres-and-documentdb',
       instanceClass: 'db.r6g.xlarge',
       allocatedStorage: 500,

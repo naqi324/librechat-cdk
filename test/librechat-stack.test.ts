@@ -377,7 +377,6 @@ describe('LibreChatStack', () => {
         .withKeyPair('test-key')
         .withFeatures({ rag: true });
       const stack = createStack(config);
-      const template = Template.fromStack(stack);
       
       // Should have RAG service in ECS mode
       // In EC2 mode, RAG is configured in user data

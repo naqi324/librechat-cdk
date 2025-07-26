@@ -61,7 +61,7 @@ export class MonitoringConstruct extends Construct {
     }
   }
   
-  private addEC2Monitoring(deployment: EC2Deployment, props: MonitoringConstructProps): void {
+  private addEC2Monitoring(deployment: EC2Deployment, _props: MonitoringConstructProps): void {
     // CPU utilization alarm
     const cpuAlarm = new cloudwatch.Alarm(this, 'EC2CPUAlarm', {
       metric: new cloudwatch.Metric({
@@ -158,7 +158,7 @@ export class MonitoringConstruct extends Construct {
     );
   }
   
-  private addECSMonitoring(deployment: ECSDeployment, props: MonitoringConstructProps): void {
+  private addECSMonitoring(deployment: ECSDeployment, _props: MonitoringConstructProps): void {
     // Service CPU utilization
     const serviceCpuMetric = new cloudwatch.Metric({
       namespace: 'AWS/ECS',
@@ -215,7 +215,7 @@ export class MonitoringConstruct extends Construct {
     
     const taskAlarm = new cloudwatch.Alarm(this, 'ECSTaskAlarm', {
       metric: runningTasksMetric,
-      threshold: deployment.service.desiredCount * 0.5,
+      threshold: 1, // Alert if less than 1 task is running
       comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
       evaluationPeriods: 2,
       treatMissingData: cloudwatch.TreatMissingData.BREACHING,
@@ -461,14 +461,8 @@ export class MonitoringConstruct extends Construct {
     errorAlarm.addAlarmAction(new cloudwatch_actions.SnsAction(this.alarmTopic));
   }
   
-  private addCostMonitoring(props: MonitoringConstructProps): void {
-    // Create a custom metric for estimated monthly cost
-    const costMetric = new cloudwatch.Metric({
-      namespace: 'LibreChat/Cost',
-      metricName: 'EstimatedMonthlyCost',
-      statistic: 'Average',
-      period: cdk.Duration.days(1),
-    });
+  private addCostMonitoring(_props: MonitoringConstructProps): void {
+    // Cost monitoring would be implemented here with AWS Cost Explorer API
     
     // Add cost widget to dashboard
     this.dashboard.addWidgets(

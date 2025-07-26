@@ -6,7 +6,6 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cr from 'aws-cdk-lib/custom-resources';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
@@ -21,9 +20,9 @@ export interface DatabaseConstructProps {
 }
 
 export class DatabaseConstruct extends Construct {
-  public readonly postgresCluster?: rds.DatabaseCluster;
-  public readonly postgresInstance?: rds.DatabaseInstance;
-  public readonly documentDbCluster?: docdb.DatabaseCluster;
+  public postgresCluster?: rds.DatabaseCluster;
+  public postgresInstance?: rds.DatabaseInstance;
+  public documentDbCluster?: docdb.DatabaseCluster;
   public readonly endpoints: { [key: string]: string } = {};
   public readonly secrets: { [key: string]: secretsmanager.ISecret } = {};
   public readonly securityGroups: { [key: string]: ec2.ISecurityGroup } = {};
@@ -220,11 +219,11 @@ export class DatabaseConstruct extends Construct {
   
   private initializeDatabases(props: DatabaseConstructProps): void {
     // Initialize PostgreSQL with pgvector
-    if (this.postgresCluster || this.postgresInstance) {
+    if ((this.postgresCluster || this.postgresInstance) && this.secrets['postgres'] && this.securityGroups['postgres']) {
       const initPostgresFunction = new lambda.Function(this, 'InitPostgresFunction', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_postgres.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '../../lambda/init-postgres')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres')),
         vpc: props.vpc,
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -240,9 +239,9 @@ export class DatabaseConstruct extends Construct {
       
       // Grant permissions
       this.secrets['postgres'].grantRead(initPostgresFunction);
-      if (this.postgresCluster) {
+      if (this.postgresCluster && initPostgresFunction.connections.securityGroups.length > 0) {
         this.securityGroups['postgres'].addIngressRule(
-          initPostgresFunction.connections.securityGroups[0],
+          initPostgresFunction.connections.securityGroups[0]!,
           ec2.Port.tcp(5432),
           'Allow Lambda to initialize database'
         );
@@ -263,11 +262,11 @@ export class DatabaseConstruct extends Construct {
     }
     
     // Initialize DocumentDB
-    if (this.documentDbCluster) {
+    if (this.documentDbCluster && this.secrets['documentdb'] && this.securityGroups['documentdb'] && this.endpoints['documentdb']) {
       const initDocdbFunction = new lambda.Function(this, 'InitDocdbFunction', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_docdb.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '../../lambda/init-docdb')),
+        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-docdb')),
         vpc: props.vpc,
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -290,11 +289,13 @@ export class DatabaseConstruct extends Construct {
       
       // Grant permissions
       this.secrets['documentdb'].grantRead(initDocdbFunction);
-      this.securityGroups['documentdb'].addIngressRule(
-        initDocdbFunction.connections.securityGroups[0],
-        ec2.Port.tcp(27017),
-        'Allow Lambda to initialize database'
-      );
+      if (initDocdbFunction.connections.securityGroups.length > 0) {
+        this.securityGroups['documentdb'].addIngressRule(
+          initDocdbFunction.connections.securityGroups[0]!,
+          ec2.Port.tcp(27017),
+          'Allow Lambda to initialize database'
+        );
+      }
       
       // Create custom resource to trigger initialization
       const provider = new cr.Provider(this, 'InitDocdbProvider', {

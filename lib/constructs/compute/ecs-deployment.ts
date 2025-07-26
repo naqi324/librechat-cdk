@@ -4,12 +4,9 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as certificatemanager from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53_targets from 'aws-cdk-lib/aws-route53-targets';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import * as autoscaling from 'aws-cdk-lib/aws-applicationautoscaling';
 import { Construct } from 'constructs';
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
@@ -39,19 +36,17 @@ export class ECSDeployment extends Construct {
   public readonly loadBalancerUrl: string;
   public readonly cluster: ecs.ICluster;
   
-  private readonly ragService?: ecs.FargateService;
-  private readonly meilisearchService?: ecs.FargateService;
   
   constructor(scope: Construct, id: string, props: ECSDeploymentProps) {
     super(scope, id);
     
     this.cluster = props.cluster;
     
-    // Create namespace for service discovery
-    const namespace = this.cluster.addDefaultCloudMapNamespace({
-      name: 'librechat.local',
-      vpc: props.vpc,
-    });
+    // Service discovery namespace would be created here if needed
+    // const namespace = this.cluster.addDefaultCloudMapNamespace({
+    //   name: 'librechat.local',
+    //   vpc: props.vpc,
+    // });
     
     // Create shared security group
     const serviceSecurityGroup = new ec2.SecurityGroup(this, 'ServiceSecurityGroup', {
@@ -69,30 +64,33 @@ export class ECSDeployment extends Construct {
     
     // Deploy supporting services first
     if (props.enableMeilisearch) {
-      this.meilisearchService = this.createMeilisearchService(props, serviceSecurityGroup);
+      this.createMeilisearchService(props, serviceSecurityGroup);
     }
     
     if (props.enableRag) {
-      this.ragService = this.createRagService(props, serviceSecurityGroup);
+      this.createRagService(props, serviceSecurityGroup);
     }
     
     // Create main LibreChat service
     this.service = this.createLibreChatService(props, serviceSecurityGroup);
     
     // Create Application Load Balancer
-    this.loadBalancer = this.createLoadBalancer(props);
+    const albSecurityGroup = this.createLoadBalancerSecurityGroup(props);
+    this.loadBalancer = this.createLoadBalancer(props, albSecurityGroup);
+    
+    // Allow ALB to communicate with service
+    serviceSecurityGroup.addIngressRule(
+      albSecurityGroup,
+      ec2.Port.tcp(3080),
+      'Allow traffic from ALB'
+    );
     
     // Configure target groups and listeners
     const targetGroup = this.createTargetGroup(props);
     this.configureListener(props, targetGroup);
     
     // Register service with target group
-    this.service.registerLoadBalancerTargets({
-      containerName: 'librechat',
-      containerPort: 3080,
-      newTargetGroupId: 'ecs',
-      targetGroup: targetGroup,
-    });
+    targetGroup.addTarget(this.service);
     
     // Set up auto-scaling
     this.configureAutoScaling(props);
@@ -180,7 +178,9 @@ export class ECSDeployment extends Construct {
     });
     
     // Grant database access
-    props.database.secrets['postgres'].grantRead(taskDefinition.taskRole);
+    if (props.database.secrets['postgres']) {
+      props.database.secrets['postgres'].grantRead(taskDefinition.taskRole);
+    }
     
     // Grant Bedrock access
     taskDefinition.taskRole.addToPrincipalPolicy(new iam.PolicyStatement({
@@ -200,7 +200,7 @@ export class ECSDeployment extends Construct {
       }),
       environment: {
         POSTGRES_DB: 'librechat',
-        DB_HOST: props.database.endpoints['postgres'],
+        DB_HOST: props.database.endpoints['postgres'] || '',
         DB_PORT: '5432',
         AWS_DEFAULT_REGION: cdk.Stack.of(this).region,
         EMBEDDINGS_PROVIDER: 'bedrock',
@@ -209,14 +209,16 @@ export class ECSDeployment extends Construct {
         CHUNK_OVERLAP: '200',
       },
       secrets: {
-        POSTGRES_USER: ecs.Secret.fromSecretsManager(
-          props.database.secrets['postgres'],
-          'username'
-        ),
-        POSTGRES_PASSWORD: ecs.Secret.fromSecretsManager(
-          props.database.secrets['postgres'],
-          'password'
-        ),
+        ...(props.database.secrets['postgres'] ? {
+          POSTGRES_USER: ecs.Secret.fromSecretsManager(
+            props.database.secrets['postgres'],
+            'username'
+          ),
+          POSTGRES_PASSWORD: ecs.Secret.fromSecretsManager(
+            props.database.secrets['postgres'],
+            'password'
+          ),
+        } : {}),
         JWT_SECRET: ecs.Secret.fromSecretsManager(
           props.appSecrets,
           'jwt_secret'
@@ -242,11 +244,13 @@ export class ECSDeployment extends Construct {
     });
     
     // Allow database access
-    props.database.securityGroups['postgres'].addIngressRule(
-      securityGroup,
-      ec2.Port.tcp(5432),
-      'Allow PostgreSQL from RAG service'
-    );
+    if (props.database.securityGroups['postgres']) {
+      props.database.securityGroups['postgres'].addIngressRule(
+        securityGroup,
+        ec2.Port.tcp(5432),
+        'Allow PostgreSQL from RAG service'
+      );
+    }
     
     return service;
   }
@@ -259,7 +263,9 @@ export class ECSDeployment extends Construct {
     
     // Grant permissions
     props.storage.grantReadWrite(taskDefinition.taskRole);
-    props.database.secrets['postgres'].grantRead(taskDefinition.taskRole);
+    if (props.database.secrets['postgres']) {
+      props.database.secrets['postgres'].grantRead(taskDefinition.taskRole);
+    }
     if (props.database.secrets['documentdb']) {
       props.database.secrets['documentdb'].grantRead(taskDefinition.taskRole);
     }
@@ -324,9 +330,9 @@ export class ECSDeployment extends Construct {
         JWT_SECRET: ecs.Secret.fromSecretsManager(props.appSecrets, 'jwt_secret'),
         CREDS_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'creds_key'),
         CREDS_IV: ecs.Secret.fromSecretsManager(props.appSecrets, 'creds_iv'),
-        MEILISEARCH_MASTER_KEY: props.enableMeilisearch 
-          ? ecs.Secret.fromSecretsManager(props.appSecrets, 'meilisearch_master_key')
-          : undefined,
+        ...(props.enableMeilisearch ? {
+          MEILISEARCH_MASTER_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'meilisearch_master_key')
+        } : {}),
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:3080/health || exit 1'],
@@ -375,11 +381,13 @@ export class ECSDeployment extends Construct {
     });
     
     // Allow database access
-    props.database.securityGroups['postgres'].addIngressRule(
-      securityGroup,
-      ec2.Port.tcp(5432),
-      'Allow PostgreSQL from LibreChat service'
-    );
+    if (props.database.securityGroups['postgres']) {
+      props.database.securityGroups['postgres'].addIngressRule(
+        securityGroup,
+        ec2.Port.tcp(5432),
+        'Allow PostgreSQL from LibreChat service'
+      );
+    }
     
     if (props.database.securityGroups['documentdb']) {
       props.database.securityGroups['documentdb'].addIngressRule(
@@ -392,7 +400,7 @@ export class ECSDeployment extends Construct {
     return service;
   }
   
-  private createLoadBalancer(props: ECSDeploymentProps): elbv2.ApplicationLoadBalancer {
+  private createLoadBalancerSecurityGroup(props: ECSDeploymentProps): ec2.SecurityGroup {
     const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for LibreChat ALB',
@@ -413,20 +421,16 @@ export class ECSDeployment extends Construct {
       );
     }
     
+    return albSecurityGroup;
+  }
+  
+  private createLoadBalancer(props: ECSDeploymentProps, securityGroup: ec2.SecurityGroup): elbv2.ApplicationLoadBalancer {
     const alb = new elbv2.ApplicationLoadBalancer(this, 'LoadBalancer', {
       vpc: props.vpc,
       internetFacing: true,
-      securityGroup: albSecurityGroup,
+      securityGroup: securityGroup,
       deletionProtection: props.environment === 'production',
     });
-    
-    // Allow ALB to communicate with services
-    const serviceSecurityGroup = this.service.connections.securityGroups[0];
-    serviceSecurityGroup.addIngressRule(
-      albSecurityGroup,
-      ec2.Port.tcp(3080),
-      'Allow traffic from ALB'
-    );
     
     return alb;
   }
@@ -506,16 +510,6 @@ export class ECSDeployment extends Construct {
       scaleOutCooldown: cdk.Duration.minutes(1),
     });
     
-    // Request count scaling
-    scaling.scaleOnRequestCount('RequestCountScaling', {
-      requestsPerTarget: 1000,
-      targetGroup: this.loadBalancer.listeners[0].addTargets('scaling-target', {
-        port: 3080,
-        targets: [],
-      }),
-      scaleInCooldown: cdk.Duration.minutes(2),
-      scaleOutCooldown: cdk.Duration.minutes(1),
-    });
   }
   
   private configureDomain(props: ECSDeploymentProps): void {

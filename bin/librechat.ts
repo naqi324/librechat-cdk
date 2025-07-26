@@ -127,8 +127,8 @@ switch (configSource) {
 const stack = new LibreChatStack(app, `LibreChatStack-${config.environment}`, {
   ...config,
   env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION,
+    account: process.env.CDK_DEFAULT_ACCOUNT || process.env.AWS_ACCOUNT_ID || 'unknown',
+    region: process.env.CDK_DEFAULT_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
   },
   description: `LibreChat ${config.environment} deployment using ${config.deploymentMode}`,
 });

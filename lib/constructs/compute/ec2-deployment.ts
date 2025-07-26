@@ -4,12 +4,9 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as elbv2_targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-import * as certificatemanager from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53_targets from 'aws-cdk-lib/aws-route53-targets';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
-import * as logs from 'aws-cdk-lib/aws-logs';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
 import { Construct } from 'constructs';
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
@@ -37,6 +34,7 @@ export class EC2Deployment extends Construct {
   public readonly loadBalancer: elbv2.ApplicationLoadBalancer;
   public readonly loadBalancerUrl: string;
   public readonly securityGroup: ec2.SecurityGroup;
+  private targetGroup: elbv2.ApplicationTargetGroup;
   
   constructor(scope: Construct, id: string, props: EC2DeploymentProps) {
     super(scope, id);
@@ -55,11 +53,11 @@ export class EC2Deployment extends Construct {
     this.loadBalancer = this.createLoadBalancer(props, albSecurityGroup);
     
     // Configure target group and listener
-    const targetGroup = this.createTargetGroup(props);
-    this.configureListener(props, targetGroup);
+    this.targetGroup = this.createTargetGroup(props);
+    this.configureListener(props, this.targetGroup);
     
     // Register instance with target group
-    targetGroup.addTarget(new elbv2_targets.InstanceTarget(this.instance, 3080));
+    this.targetGroup.addTarget(new elbv2_targets.InstanceTarget(this.instance, 3080));
     
     // Set up domain if configured
     if (props.domainConfig?.hostedZoneId) {
@@ -132,7 +130,7 @@ export class EC2Deployment extends Construct {
     );
     
     // Allow SSH from specified IPs
-    props.allowedIps.forEach((ip, index) => {
+    props.allowedIps.forEach((ip) => {
       sg.addIngressRule(
         ec2.Peer.ipv4(ip),
         ec2.Port.tcp(22),
@@ -279,7 +277,7 @@ export class EC2Deployment extends Construct {
       
       // Get secrets
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
-      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json`,
+      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres']?.secretArn || 'none'} --query SecretString --output text > /tmp/db-secrets.json`,
       
       // Create environment file
       'cat > .env << EOL',
@@ -514,7 +512,7 @@ export class EC2Deployment extends Construct {
       'rm -f /tmp/app-secrets.json /tmp/db-secrets.json',
       
       // Signal completion
-      `cfn-signal -e $? --stack ${cdk.Stack.of(this).stackName} --resource ${this.node.id} --region ${cdk.Stack.of(this).region}`,
+      `cfn-signal -e $? --stack ${cdk.Stack.of(this).stackName} --resource EC2Instance --region ${cdk.Stack.of(this).region}`,
     );
     
     const instance = new ec2.Instance(this, 'Instance', {
@@ -541,7 +539,7 @@ export class EC2Deployment extends Construct {
       ],
       init: ec2.CloudFormationInit.fromElements(
         ec2.InitFile.fromString('/etc/cfn/cfn-hup.conf', `[main]\nstack=${cdk.Stack.of(this).stackName}\nregion=${cdk.Stack.of(this).region}\n`),
-        ec2.InitFile.fromString('/etc/cfn/hooks.d/cfn-auto-reloader.conf', `[cfn-auto-reloader-hook]\ntriggers=post.update\npath=Resources.${this.node.id}.Metadata.AWS::CloudFormation::Init\naction=/opt/aws/bin/cfn-init -v --stack ${cdk.Stack.of(this).stackName} --resource ${this.node.id} --region ${cdk.Stack.of(this).region}\nrunas=root\n`),
+        ec2.InitFile.fromString('/etc/cfn/hooks.d/cfn-auto-reloader.conf', `[cfn-auto-reloader-hook]\ntriggers=post.update\npath=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init\naction=/opt/aws/bin/cfn-init -v --stack ${cdk.Stack.of(this).stackName} --resource EC2Instance --region ${cdk.Stack.of(this).region}\nrunas=root\n`),
       ),
       initOptions: {
         timeout: cdk.Duration.minutes(15),
@@ -599,7 +597,7 @@ export class EC2Deployment extends Construct {
   private configureListener(props: EC2DeploymentProps, targetGroup: elbv2.ApplicationTargetGroup): void {
     if (props.domainConfig?.certificateArn) {
       // HTTPS listener
-      const httpsListener = this.loadBalancer.addListener('HTTPSListener', {
+      this.loadBalancer.addListener('HTTPSListener', {
         port: 443,
         protocol: elbv2.ApplicationProtocol.HTTPS,
         certificates: [
@@ -694,7 +692,7 @@ export class EC2Deployment extends Construct {
       metricName: 'HealthyHostCount',
       dimensionsMap: {
         LoadBalancer: this.loadBalancer.loadBalancerFullName,
-        TargetGroup: targetGroup.targetGroupFullName,
+        TargetGroup: this.targetGroup.targetGroupFullName,
       },
       statistic: 'Average',
       period: cdk.Duration.minutes(1),

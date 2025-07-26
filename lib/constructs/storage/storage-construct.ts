@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -13,7 +14,7 @@ export interface StorageConstructProps {
 
 export class StorageConstruct extends Construct {
   public readonly s3Bucket: s3.Bucket;
-  public readonly fileSystem?: efs.FileSystem;
+  public fileSystem?: efs.FileSystem;
   public readonly accessPoints: { [key: string]: efs.AccessPoint } = {};
   
   constructor(scope: Construct, id: string, props: StorageConstructProps) {
@@ -92,8 +93,8 @@ export class StorageConstruct extends Construct {
     }));
     
     // Create folder structure
-    new s3.BucketDeployment(this, 'CreateFolders', {
-      sources: [s3.Source.data('uploads/.keep', ''), s3.Source.data('documents/.keep', '')],
+    new s3deploy.BucketDeployment(this, 'CreateFolders', {
+      sources: [s3deploy.Source.data('uploads/.keep', ''), s3deploy.Source.data('documents/.keep', '')],
       destinationBucket: bucket,
       retainOnDelete: false,
     });
