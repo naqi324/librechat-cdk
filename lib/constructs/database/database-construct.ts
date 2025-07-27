@@ -112,7 +112,7 @@ export class DatabaseConstruct extends Construct {
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       defaultDatabaseName: 'librechat',
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `librechat-${props.environment}-postgres-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
       }),
     });
     
@@ -164,7 +164,7 @@ export class DatabaseConstruct extends Construct {
       deletionProtection: false,
       databaseName: 'librechat',
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `librechat-${props.environment}-postgres-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
       }),
       multiAz: false,
       publiclyAccessible: false,
@@ -207,7 +207,7 @@ export class DatabaseConstruct extends Construct {
       cloudWatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       masterUser: {
         username: 'docdbadmin',
-        secretName: `librechat-${props.environment}-documentdb-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-documentdb-secret`,
       },
     });
     

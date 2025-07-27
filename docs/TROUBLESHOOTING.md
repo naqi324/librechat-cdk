@@ -13,6 +13,30 @@
 
 ## Deployment Issues
 
+### Issue: Secret Already Exists Error
+
+**Symptoms:**
+```
+Resource handler returned message: "The operation failed because the secret librechat-development-postgres-secret already exists"
+```
+
+**Solution:**
+This has been fixed - secrets now use the stack name which includes a unique identifier. If you encounter this with an old deployment:
+
+1. **Delete the existing secret:**
+   ```bash
+   aws secretsmanager delete-secret \
+     --secret-id librechat-development-postgres-secret \
+     --force-delete-without-recovery
+   ```
+
+2. **Or use the cleanup script:**
+   ```bash
+   ./scripts/cleanup-failed.sh
+   ```
+
+## Deployment Issues
+
 ### Issue: CDK Bootstrap Fails
 
 **Symptoms:**
