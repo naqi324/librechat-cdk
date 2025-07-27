@@ -242,7 +242,7 @@ export class DatabaseConstruct extends Construct {
           DB_NAME: 'librechat',
           DB_SECRET_ID: this.secrets['postgres'].secretArn,
         },
-        timeout: cdk.Duration.minutes(5),
+        timeout: cdk.Duration.minutes(15),  // Increased from 5 to 15 minutes
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
       });
@@ -261,14 +261,26 @@ export class DatabaseConstruct extends Construct {
       const provider = new cr.Provider(this, 'InitPostgresProvider', {
         onEventHandler: initPostgresFunction,
         logRetention: logs.RetentionDays.ONE_DAY,
+        totalTimeout: cdk.Duration.minutes(20),  // Add total timeout for the provider
       });
       
-      new cdk.CustomResource(this, 'InitPostgresResource', {
+      const initResource = new cdk.CustomResource(this, 'InitPostgresResource', {
         serviceToken: provider.serviceToken,
         properties: {
           Version: '1.0', // Change this to trigger reinitialization
+          DBHost: this.endpoints['postgres'],
+          DBPort: '5432',
+          DBName: 'librechat',
+          SecretId: this.secrets['postgres'].secretArn,
         },
       });
+      
+      // Ensure the custom resource waits for the database to be created
+      if (this.postgresInstance) {
+        initResource.node.addDependency(this.postgresInstance);
+      } else if (this.postgresCluster) {
+        initResource.node.addDependency(this.postgresCluster);
+      }
     }
     
     // Initialize DocumentDB

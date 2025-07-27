@@ -16,6 +16,8 @@
     "synth": "npm run build && cdk synth",
     "diff": "npm run build && cdk diff",
     "deploy": "npm run build && cdk deploy",
+    "deploy:verbose": "./scripts/deploy-verbose.sh",
+    "deploy:fast": "./scripts/fast-deploy.sh",
     "deploy:dev": "npm run build && cdk deploy -c configSource=standard-dev",
     "deploy:staging": "npm run build && DEPLOYMENT_ENV=staging cdk deploy",
     "deploy:prod": "npm run build && DEPLOYMENT_ENV=production cdk deploy -c configSource=production-ecs",

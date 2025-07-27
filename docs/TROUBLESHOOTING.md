@@ -223,6 +223,30 @@ The project uses pre-built Lambda layers and does NOT require Docker. If you see
    aws ec2 describe-security-groups --group-ids sg-xxxxxx
    ```
 
+### Issue: Database Initialization Timeout
+
+**Symptoms:**
+```
+Error: Database did not become available in time
+CREATE_FAILED | AWS::CloudFormation::CustomResource | Database/InitPostgresResource
+```
+
+**Solutions:**
+
+1. **RDS takes 5-10 minutes to start** - This is normal for first deployment
+2. **The fix has been applied** - Lambda timeout increased to 15 minutes, retries increased to 60
+3. **If still failing**, check CloudWatch logs:
+   ```bash
+   aws logs tail /aws/lambda/LibreChatStack-development-DatabaseInitPostgresFunc
+   ```
+4. **Manual initialization option:**
+   ```bash
+   # Connect to RDS after deployment completes:
+   psql -h <rds-endpoint> -U postgres -d librechat
+   # Then run:
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+
 ### Issue: pgvector Extension Not Found
 
 **Symptoms:**

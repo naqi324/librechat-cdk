@@ -111,6 +111,45 @@ The setup script will:
 
 For manual deployment or advanced configuration, see the [Deployment Guide](DEPLOYMENT_GUIDE.md).
 
+### Deployment Commands
+
+```bash
+# Standard deployment (shows progress bar)
+npm run deploy
+
+# Verbose deployment (detailed descriptions of each step)
+npm run deploy:verbose
+
+# Deploy to specific environments
+npm run deploy:dev
+npm run deploy:staging
+npm run deploy:prod
+```
+
+The verbose deployment mode provides:
+- 🌐 Creating VPC and networking resources
+- 🗄️ Setting up RDS PostgreSQL database
+- ⚡ Deploying Lambda functions
+- 🐳 Launching ECS containers or EC2 instances
+- ⚖️ Configuring load balancers
+- 📦 Creating storage buckets
+- 📊 Setting up monitoring
+- And more detailed progress updates!
+
+### Fast Deployment
+
+For quicker deployments (10 minutes instead of 15-20):
+
+```bash
+# Use minimal resources for fastest deployment
+npm run deploy:fast
+
+# Or set resource size manually
+RESOURCE_SIZE=xs npm run deploy
+```
+
+See [Deployment Optimization Guide](docs/DEPLOYMENT_OPTIMIZATION.md) for details.
+
 ### 2. Access LibreChat
 
 After deployment completes (15-20 minutes), you'll receive:

@@ -1,4 +1,5 @@
 import { LibreChatStackProps } from '../lib/librechat-stack';
+import { getResourceSizeFromEnv, ResourceSize } from './resource-sizes';
 
 // Environment-specific configurations
 export const environmentConfigs = {
@@ -183,6 +184,27 @@ export class DeploymentConfigBuilder {
     return this;
   }
   
+  withResourceSize(size: string | ResourceSize): this {
+    const resourceSize = typeof size === 'string' ? getResourceSizeFromEnv() : size;
+    
+    // Apply resource sizes based on deployment mode
+    if (this.config.deploymentMode === 'EC2' && this.config.computeConfig) {
+      this.config.computeConfig.instanceType = resourceSize.ec2.instanceType;
+    } else if (this.config.deploymentMode === 'ECS' && this.config.computeConfig) {
+      this.config.computeConfig.cpu = resourceSize.ecs.cpu;
+      this.config.computeConfig.memory = resourceSize.ecs.memory;
+      this.config.computeConfig.desiredCount = resourceSize.ecs.desiredCount;
+    }
+    
+    // Apply database sizes
+    if (this.config.databaseConfig) {
+      this.config.databaseConfig.instanceClass = resourceSize.rds.instanceClass;
+      this.config.databaseConfig.allocatedStorage = resourceSize.rds.allocatedStorage;
+    }
+    
+    return this;
+  }
+  
   build(): LibreChatStackProps {
     // Validate required fields
     if (!this.config.environment) {
@@ -299,6 +321,11 @@ export function getConfigFromEnvironment(): LibreChatStackProps {
     builder.withDeploymentMode(mode);
   }
   
+  // Apply resource size if specified
+  if (process.env.RESOURCE_SIZE || process.env.FAST_DEPLOY) {
+    builder.withResourceSize(process.env.RESOURCE_SIZE || 'medium');
+  }
+  
   // Apply environment variables
   if (process.env.KEY_PAIR_NAME) {
     builder.withKeyPair(process.env.KEY_PAIR_NAME);
@@ -309,7 +336,7 @@ export function getConfigFromEnvironment(): LibreChatStackProps {
   }
   
   if (process.env.ALLOWED_IPS) {
-    builder.withAllowedIps(process.env.ALLOWED_IPS.split(','));
+    builder.withAllowedIps(process.env.ALLOWED_IPs.split(','));
   }
   
   if (process.env.DOMAIN_NAME) {

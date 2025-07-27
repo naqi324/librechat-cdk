@@ -88,6 +88,20 @@ Advanced deployment script for CI/CD pipelines. Use this when you need:
 - Custom environment variables
 - Integration with CI/CD systems
 
+### `deploy-verbose.sh`
+Enhanced deployment script with descriptive output:
+```bash
+./scripts/deploy-verbose.sh
+# Or use npm script:
+npm run deploy:verbose
+```
+This script provides detailed descriptions of what's happening during deployment:
+- Creating VPC and networking resources
+- Setting up RDS PostgreSQL database (5-10 minutes)
+- Deploying Lambda functions
+- Launching compute resources
+- And much more!
+
 ### `create-one-click-deploy.sh`
 Generates a CloudFormation template for one-click deployment via AWS Console.
 ```bash
