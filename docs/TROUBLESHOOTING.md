@@ -35,6 +35,38 @@ This has been fixed - secrets now use the stack name which includes a unique ide
    ./scripts/cleanup-failed.sh
    ```
 
+### Issue: ECS Registry Authentication Error
+
+**Symptoms:**
+```
+ResourceInitializationError: unable to pull secrets or registry auth: execution resource retrieval failed: unable to retrieve secret from asm: service call has been retried 1 time(s): retrieved secret from Secrets Manager did not contain json key creds_key
+```
+
+**Solution:**
+This has been fixed - the app secrets now properly include all required keys (jwt_secret, creds_key, creds_iv, and meilisearch_master_key). If you encounter this error:
+
+1. **The fix has been automatically applied** - new deployments will create all required secret keys
+2. **For existing deployments**, delete and recreate the stack:
+   ```bash
+   cdk destroy LibreChatStack --force
+   cdk deploy
+   ```
+3. **Manual fix (if needed)**:
+   ```bash
+   # Get the secret ARN
+   SECRET_ARN=$(aws secretsmanager describe-secret --secret-id LibreChatStack-*-AppSecrets* --query ARN --output text)
+   
+   # Update the secret with all required keys
+   aws secretsmanager put-secret-value \
+     --secret-id $SECRET_ARN \
+     --secret-string '{
+       "jwt_secret":"'$(openssl rand -hex 32)'",
+       "creds_key":"'$(openssl rand -hex 32)'",
+       "creds_iv":"'$(openssl rand -hex 16)'",
+       "meilisearch_master_key":"'$(openssl rand -hex 32)'"
+     }'
+   ```
+
 ## Deployment Issues
 
 ### Issue: CDK Bootstrap Fails

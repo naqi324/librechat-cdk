@@ -2,6 +2,9 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import { Construct } from 'constructs';
 
 // Import custom constructs
@@ -110,7 +113,7 @@ export class LibreChatStack extends cdk.Stack {
     this.databaseEndpoints = database.endpoints;
     
     // Create secrets for application
-    const appSecrets = this.createApplicationSecrets();
+    const appSecrets = this.createApplicationSecrets(props);
     
     // Deploy based on selected mode
     let deployment: EC2Deployment | ECSDeployment;
@@ -222,7 +225,8 @@ export class LibreChatStack extends cdk.Stack {
     }
   }
   
-  private createApplicationSecrets(): secretsmanager.ISecret {
+  private createApplicationSecrets(props: LibreChatStackProps): secretsmanager.ISecret {
+    // Create a secret with all required keys
     const secret = new secretsmanager.Secret(this, 'AppSecrets', {
       description: 'LibreChat application secrets',
       generateSecretString: {
@@ -232,6 +236,84 @@ export class LibreChatStack extends cdk.Stack {
         passwordLength: 32,
       },
     });
+
+    // Create a Lambda function to populate additional secret keys
+    const populateSecretsFunction = new lambda.Function(this, 'PopulateSecretsFunction', {
+      runtime: lambda.Runtime.PYTHON_3_11,
+      handler: 'index.handler',
+      code: lambda.Code.fromInline(`
+import json
+import boto3
+import secrets
+import os
+
+def handler(event, context):
+    """
+    Populate additional secret keys required by LibreChat
+    """
+    try:
+        secret_id = event['ResourceProperties']['SecretId']
+        enable_meilisearch = event['ResourceProperties'].get('EnableMeilisearch', 'false') == 'true'
+        
+        # Get the secret
+        sm_client = boto3.client('secretsmanager')
+        response = sm_client.get_secret_value(SecretId=secret_id)
+        
+        # Parse existing secret
+        secret_data = json.loads(response['SecretString'])
+        
+        # Add missing keys if they don't exist
+        if 'creds_key' not in secret_data:
+            secret_data['creds_key'] = secrets.token_hex(32)
+        
+        if 'creds_iv' not in secret_data:
+            secret_data['creds_iv'] = secrets.token_hex(16)
+        
+        if enable_meilisearch and 'meilisearch_master_key' not in secret_data:
+            secret_data['meilisearch_master_key'] = secrets.token_hex(32)
+        
+        # Update the secret
+        sm_client.update_secret(
+            SecretId=secret_id,
+            SecretString=json.dumps(secret_data)
+        )
+        
+        return {
+            'PhysicalResourceId': f'{secret_id}-populated',
+            'Data': {
+                'SecretArn': secret_id,
+                'Status': 'SUCCESS'
+            }
+        }
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise
+`),
+      timeout: cdk.Duration.minutes(1),
+      logRetention: logs.RetentionDays.ONE_WEEK,
+    });
+
+    // Grant the Lambda function permission to read and update the secret
+    secret.grantRead(populateSecretsFunction);
+    secret.grantWrite(populateSecretsFunction);
+
+    // Create a custom resource to trigger the Lambda function
+    const provider = new cr.Provider(this, 'PopulateSecretsProvider', {
+      onEventHandler: populateSecretsFunction,
+      logRetention: logs.RetentionDays.ONE_DAY,
+    });
+
+    const populateResource = new cdk.CustomResource(this, 'PopulateSecretsResource', {
+      serviceToken: provider.serviceToken,
+      properties: {
+        SecretId: secret.secretArn,
+        EnableMeilisearch: String(props.enableMeilisearch || false),
+        Version: '1.0', // Change this to trigger re-population
+      },
+    });
+
+    // Ensure the custom resource runs after the secret is created
+    populateResource.node.addDependency(secret);
     
     // Note: Secret rotation would be added here for production environments
     // secret.addRotationSchedule('AppSecretRotation', {
