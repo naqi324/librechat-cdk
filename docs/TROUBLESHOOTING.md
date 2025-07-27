@@ -89,6 +89,30 @@ This has been fixed - the app secrets now properly include all required keys (jw
      }'
    ```
 
+### Issue: S3 Bucket Name Already Exists
+
+**Symptoms:**
+```
+Bucket with name 'librechat-development-123456789012-us-east-1' already exists
+```
+
+**Solution:**
+This has been fixed - S3 buckets now use the stack name plus a unique hash for global uniqueness. If you encounter this with an old deployment:
+
+1. **Delete the existing bucket (if empty):**
+   ```bash
+   aws s3 rb s3://librechat-development-123456789012-us-east-1 --force
+   ```
+
+2. **Or manually empty and delete:**
+   ```bash
+   # Empty the bucket first
+   aws s3 rm s3://librechat-development-123456789012-us-east-1 --recursive
+   
+   # Then delete it
+   aws s3api delete-bucket --bucket librechat-development-123456789012-us-east-1
+   ```
+
 ## Deployment Issues
 
 ### Issue: CDK Bootstrap Fails

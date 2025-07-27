@@ -30,8 +30,12 @@ export class StorageConstruct extends Construct {
   }
   
   private createS3Bucket(props: StorageConstructProps): s3.Bucket {
+    // Generate a unique bucket name using stack name and a short hash
+    const stackName = cdk.Stack.of(this).stackName.toLowerCase();
+    const uniqueSuffix = cdk.Stack.of(this).node.addr.substring(0, 8).toLowerCase();
+    
     const bucket = new s3.Bucket(this, 'DocumentBucket', {
-      bucketName: `librechat-${props.environment}-${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}`,
+      bucketName: `${stackName}-docs-${uniqueSuffix}`,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       versioned: true,
