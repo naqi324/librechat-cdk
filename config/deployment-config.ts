@@ -335,8 +335,9 @@ export function getConfigFromEnvironment(): LibreChatStackProps {
     builder.withAlertEmail(process.env.ALERT_EMAIL);
   }
   
-  if (process.env.ALLOWED_IPS) {
-    builder.withAllowedIps(process.env.ALLOWED_IPs.split(','));
+  const allowedIps = process.env.ALLOWED_IPS;
+  if (allowedIps) {
+    builder.withAllowedIps(allowedIps.split(','));
   }
   
   if (process.env.DOMAIN_NAME) {

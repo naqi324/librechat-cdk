@@ -232,49 +232,76 @@ else
     print_status "ECS deployment selected - no SSH key required"
 fi
 
-# Resource Size Selection
-echo -e "\n${BLUE}Resource Size Configuration${NC}"
-echo "========================="
+# Deployment Speed Choice
+echo -e "\n${BLUE}Deployment Speed Configuration${NC}"
+echo "==============================="
 echo
-echo "Select the resource size for your deployment:"
+echo "How would you like to optimize your deployment?"
 echo
-echo "1) Extra Small (XS) - Testing only (1-5 users)"
-echo "   • EC2: t3.micro, ECS: 256 CPU/512 MB"
-echo "   • RDS: db.t3.micro, 20 GB storage"
-echo "   • ~$50/month"
+echo "1) Fast Deployment (Recommended for first-time users)"
+echo "   • Uses minimal resources for quickest setup (~10 minutes)"
+echo "   • Perfect for testing and development"
+echo "   • Easy to scale up later"
+echo "   • ~$40/month"
 echo
-echo "2) Small - Light workloads (5-20 users)"
-echo "   • EC2: t3.small, ECS: 512 CPU/1 GB" 
-echo "   • RDS: db.t3.small, 50 GB storage"
-echo "   • ~$120/month"
+echo "2) Custom Resource Size"
+echo "   • Choose specific resource sizes"
+echo "   • Better for production use"
+echo "   • Takes 15-20 minutes"
 echo
-echo "3) Medium - Standard workloads (20-100 users) [Recommended]"
-echo "   • EC2: t3.large, ECS: 1024 CPU/2 GB"
-echo "   • RDS: db.t3.medium, 100 GB storage"
-echo "   • ~$300/month"
-echo
-echo "4) Large - Heavy workloads (100-500 users)"
-echo "   • EC2: t3.xlarge, ECS: 2048 CPU/4 GB"
-echo "   • RDS: db.r6g.large, 200 GB storage"
-echo "   • ~$800/month"
-echo
-echo "5) Extra Large (XL) - Enterprise (500+ users)"
-echo "   • EC2: t3.2xlarge, ECS: 4096 CPU/8 GB"
-echo "   • RDS: db.r6g.xlarge, 500 GB storage"
-echo "   • ~$2000/month"
-echo
-prompt_with_default "Enter choice (1-5)" "3" size_choice
+prompt_with_default "Enter choice (1 or 2)" "1" speed_choice
 
-case "$size_choice" in
-    1) RESOURCE_SIZE="xs" ;;
-    2) RESOURCE_SIZE="small" ;;
-    3) RESOURCE_SIZE="medium" ;;
-    4) RESOURCE_SIZE="large" ;;
-    5) RESOURCE_SIZE="xl" ;;
-    *) RESOURCE_SIZE="medium" ;;
-esac
+if [ "$speed_choice" = "1" ]; then
+    RESOURCE_SIZE="xs"
+    FAST_DEPLOY="true"
+    print_status "Fast deployment mode selected"
+    print_info "You can scale up resources later with: RESOURCE_SIZE=medium npm run deploy"
+else
+    # Resource Size Selection
+    echo -e "\n${BLUE}Resource Size Configuration${NC}"
+    echo "========================="
+    echo
+    echo "Select the resource size for your deployment:"
+    echo
+    echo "1) Extra Small (XS) - Testing only (1-5 users)"
+    echo "   • EC2: t3.micro, ECS: 256 CPU/512 MB"
+    echo "   • RDS: db.t3.micro, 20 GB storage"
+    echo "   • ~$50/month"
+    echo
+    echo "2) Small - Light workloads (5-20 users)"
+    echo "   • EC2: t3.small, ECS: 512 CPU/1 GB" 
+    echo "   • RDS: db.t3.small, 50 GB storage"
+    echo "   • ~$120/month"
+    echo
+    echo "3) Medium - Standard workloads (20-100 users) [Recommended]"
+    echo "   • EC2: t3.large, ECS: 1024 CPU/2 GB"
+    echo "   • RDS: db.t3.medium, 100 GB storage"
+    echo "   • ~$300/month"
+    echo
+    echo "4) Large - Heavy workloads (100-500 users)"
+    echo "   • EC2: t3.xlarge, ECS: 2048 CPU/4 GB"
+    echo "   • RDS: db.r6g.large, 200 GB storage"
+    echo "   • ~$800/month"
+    echo
+    echo "5) Extra Large (XL) - Enterprise (500+ users)"
+    echo "   • EC2: t3.2xlarge, ECS: 4096 CPU/8 GB"
+    echo "   • RDS: db.r6g.xlarge, 500 GB storage"
+    echo "   • ~$2000/month"
+    echo
+    prompt_with_default "Enter choice (1-5)" "3" size_choice
 
-print_status "Resource size: $RESOURCE_SIZE"
+    case "$size_choice" in
+        1) RESOURCE_SIZE="xs" ;;
+        2) RESOURCE_SIZE="small" ;;
+        3) RESOURCE_SIZE="medium" ;;
+        4) RESOURCE_SIZE="large" ;;
+        5) RESOURCE_SIZE="xl" ;;
+        *) RESOURCE_SIZE="medium" ;;
+    esac
+    
+    FAST_DEPLOY="false"
+    print_status "Resource size: $RESOURCE_SIZE"
+fi
 
 # Environment selection
 echo -e "\n${BLUE}Environment Configuration${NC}"
@@ -362,6 +389,7 @@ cat > .env << EOF
 DEPLOYMENT_ENV=$DEPLOYMENT_ENV
 DEPLOYMENT_MODE=$DEPLOYMENT_MODE
 RESOURCE_SIZE=$RESOURCE_SIZE
+FAST_DEPLOY=$FAST_DEPLOY
 EOF
 
 if [ "$DEPLOYMENT_MODE" = "EC2" ]; then

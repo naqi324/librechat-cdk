@@ -29,7 +29,9 @@ export interface ResourceSize {
   estimatedMonthlyCost: number;
 }
 
-export const RESOURCE_SIZES: { [key: string]: ResourceSize } = {
+type ResourceSizeKey = 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'fast-deploy';
+
+export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
   // Minimal - for testing and development
   'xs': {
     name: 'Extra Small',
@@ -189,7 +191,13 @@ export const RESOURCE_SIZES: { [key: string]: ResourceSize } = {
  * Get resource size configuration
  */
 export function getResourceSize(size: string): ResourceSize {
-  return RESOURCE_SIZES[size] || RESOURCE_SIZES['medium'];
+  // Check if the size is a valid key
+  if (size in RESOURCE_SIZES) {
+    return RESOURCE_SIZES[size as ResourceSizeKey];
+  }
+  
+  // Fallback to medium
+  return RESOURCE_SIZES['medium'];
 }
 
 /**

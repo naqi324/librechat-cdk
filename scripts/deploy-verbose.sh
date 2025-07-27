@@ -44,7 +44,12 @@ echo "  6. Set up S3 buckets for file storage"
 echo "  7. Create CloudWatch monitoring and alarms"
 echo "  8. Configure IAM roles and security groups"
 echo ""
-echo -e "${YELLOW}⏱️  Estimated time: 15-20 minutes for first deployment${NC}"
+# Check resource size
+if [ "$RESOURCE_SIZE" = "xs" ] || [ "$FAST_DEPLOY" = "true" ]; then
+    echo -e "${YELLOW}⏱️  Estimated time: 10-12 minutes (Fast deployment mode)${NC}"
+else
+    echo -e "${YELLOW}⏱️  Estimated time: 15-20 minutes for first deployment${NC}"
+fi
 echo ""
 
 # Deploy with verbose output
