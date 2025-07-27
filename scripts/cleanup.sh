@@ -89,9 +89,22 @@ delete_stack() {
     return 1
 }
 
-# Find all LibreChat-related stacks
+# Find all LibreChat-related stacks (including failed ones)
 echo -e "${BLUE}Finding all LibreChat CloudFormation stacks...${NC}"
-ALL_STACKS=$(aws cloudformation list-stacks --stack-status-filter CREATE_COMPLETE UPDATE_COMPLETE DELETE_FAILED --query "StackSummaries[?contains(StackName, 'LibreChat') || StackName=='$STACK_NAME'].StackName" --output text 2>/dev/null || echo "")
+
+# Get stacks in various states
+ALL_STACKS=""
+STACK_STATUSES="CREATE_COMPLETE UPDATE_COMPLETE ROLLBACK_COMPLETE CREATE_FAILED DELETE_FAILED UPDATE_ROLLBACK_COMPLETE UPDATE_ROLLBACK_FAILED"
+
+for status in $STACK_STATUSES; do
+    STACKS=$(aws cloudformation list-stacks --stack-status-filter "$status" --query "StackSummaries[?contains(StackName, 'LibreChat') || contains(StackName, 'librechat') || StackName=='$STACK_NAME'].StackName" --output text 2>/dev/null || echo "")
+    if [ ! -z "$STACKS" ]; then
+        ALL_STACKS="$ALL_STACKS $STACKS"
+    fi
+done
+
+# Remove duplicates
+ALL_STACKS=$(echo "$ALL_STACKS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
 if [ -z "$ALL_STACKS" ]; then
     echo "No LibreChat stacks found"

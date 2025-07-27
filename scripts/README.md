@@ -142,6 +142,29 @@ This script:
 - Retries stack deletion
 - Useful for DELETE_FAILED stacks
 
+### `cleanup-failed.sh`
+Quick cleanup for all failed CDK deployments.
+```bash
+./scripts/cleanup-failed.sh
+```
+Automatically finds and deletes all stacks in failed states:
+- CREATE_FAILED
+- ROLLBACK_COMPLETE
+- UPDATE_ROLLBACK_COMPLETE
+- DELETE_FAILED
+- UPDATE_ROLLBACK_FAILED
+
+### `deep-clean-cdk.sh`
+Nuclear option - deletes ALL CDK stacks and resources.
+```bash
+./scripts/deep-clean-cdk.sh
+```
+**WARNING:** This will delete:
+- All CloudFormation stacks (any status)
+- CDK bootstrap stacks
+- All associated AWS resources
+- Orphaned CDK resources (S3 buckets, ECR repos)
+
 ## Script Organization
 
 We've consolidated multiple bootstrap-related scripts into a single `manage-bootstrap.sh` script to reduce complexity. The previous individual scripts (check-bootstrap-status.sh, fix-bootstrap.sh, deep-clean-bootstrap.sh, force-clean-bootstrap.sh) have been removed in favor of this unified approach.
