@@ -261,7 +261,6 @@ export class DatabaseConstruct extends Construct {
       const provider = new cr.Provider(this, 'InitPostgresProvider', {
         onEventHandler: initPostgresFunction,
         logRetention: logs.RetentionDays.ONE_DAY,
-        totalTimeout: cdk.Duration.minutes(20),  // Add total timeout for the provider
       });
       
       const initResource = new cdk.CustomResource(this, 'InitPostgresResource', {
