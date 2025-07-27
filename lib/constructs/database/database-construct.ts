@@ -218,18 +218,18 @@ export class DatabaseConstruct extends Construct {
   private initializeDatabases(props: DatabaseConstructProps): void {
     // Initialize PostgreSQL with pgvector
     if ((this.postgresCluster || this.postgresInstance) && this.secrets['postgres'] && this.securityGroups['postgres']) {
+      // Create Lambda layer for psycopg2
+      const psycopg2Layer = new lambda.LayerVersion(this, 'Psycopg2Layer', {
+        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/psycopg2/psycopg2-layer.zip')),
+        compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
+        description: 'psycopg2-binary for PostgreSQL access',
+      });
+      
       const initPostgresFunction = new lambda.Function(this, 'InitPostgresFunction', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_postgres.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres'), {
-          bundling: {
-            image: lambda.Runtime.PYTHON_3_11.bundlingImage,
-            command: [
-              'bash', '-c',
-              'pip install -r requirements.txt -t /asset-output && cp -au . /asset-output'
-            ],
-          },
-        }),
+        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres')),
+        layers: [psycopg2Layer],
         vpc: props.vpc,
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,

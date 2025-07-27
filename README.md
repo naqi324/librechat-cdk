@@ -87,7 +87,6 @@
 
 ### Optional
 
-- 🔧 Docker Desktop (for local development)
 - 🔑 EC2 Key Pair (required for EC2 deployment mode - see [Key Pair Setup](#key-pair-setup))
 - 🌐 Domain name and SSL certificate (for HTTPS)
 - 📧 Email address for monitoring alerts
@@ -339,12 +338,7 @@ For detailed migration instructions, please refer to the AWS CDK migration docum
 
 ### Common Issues
 
-**Issue**: Deployment fails with "no space left on device"
-
-```bash
-# Solution: Clean up Docker
-docker system prune -a
-```
+**Note**: Docker is NOT required for CDK deployment. The project uses pre-built Lambda layers.
 
 **Issue**: Cannot access application after deployment
 

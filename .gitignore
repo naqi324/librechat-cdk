@@ -121,7 +121,7 @@ htmlcov/
 
 # Lambda layers
 layers/**/python/
-layers/**/*.zip
+!layers/**/psycopg2-layer.zip
 !layers/**/requirements.txt
 
 # Lambda build artifacts

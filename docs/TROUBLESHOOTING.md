@@ -92,27 +92,16 @@ Ensure your AWS user has AdministratorAccess or create a custom policy:
 }
 ```
 
-### Issue: Docker Build Fails
+### Issue: Lambda Function Build Fails
 
 **Symptoms:**
 ```
-docker exited with status 1
+Error: Failed to bundle asset
+docker exited with status 125
 ```
 
-**Solutions:**
-1. **Ensure Docker is running:**
-   ```bash
-   docker info
-   ```
-
-2. **Clean Docker cache:**
-   ```bash
-   docker system prune -a
-   ```
-
-3. **Increase Docker resources:**
-   - Docker Desktop → Preferences → Resources
-   - Increase Memory to at least 4GB
+**Solution:**
+The project uses pre-built Lambda layers and does NOT require Docker. If you see Docker errors, ensure you're using the latest version of the code which includes pre-built layers for psycopg2.
 
 ## Runtime Issues
 
