@@ -16,6 +16,7 @@ export class StorageConstruct extends Construct {
   public readonly s3Bucket: s3.Bucket;
   public fileSystem?: efs.FileSystem;
   public readonly accessPoints: { [key: string]: efs.AccessPoint } = {};
+  private efsSecurityGroup?: ec2.SecurityGroup;
   
   constructor(scope: Construct, id: string, props: StorageConstructProps) {
     super(scope, id);
@@ -115,9 +116,17 @@ export class StorageConstruct extends Construct {
       throw new Error('VPC is required for EFS storage');
     }
     
+    // Create security group for EFS
+    this.efsSecurityGroup = new ec2.SecurityGroup(this, 'EfsSecurityGroup', {
+      vpc: props.vpc,
+      description: 'Security group for EFS mount targets',
+      allowAllOutbound: false,
+    });
+    
     // Create EFS file system
     this.fileSystem = new efs.FileSystem(this, 'SharedFileSystem', {
       vpc: props.vpc,
+      securityGroup: this.efsSecurityGroup,
       performanceMode: efs.PerformanceMode.GENERAL_PURPOSE,
       throughputMode: efs.ThroughputMode.ELASTIC,
       lifecyclePolicy: efs.LifecyclePolicy.AFTER_30_DAYS,
@@ -209,6 +218,19 @@ export class StorageConstruct extends Construct {
         'elasticfilesystem:ClientMount',
         'elasticfilesystem:ClientWrite',
         'elasticfilesystem:ClientRootAccess'
+      );
+    }
+  }
+  
+  /**
+   * Allow an ECS service to mount the EFS file system
+   */
+  public allowEfsMount(securityGroup: ec2.ISecurityGroup): void {
+    if (this.efsSecurityGroup) {
+      this.efsSecurityGroup.addIngressRule(
+        securityGroup,
+        ec2.Port.tcp(2049),
+        'Allow NFS traffic from ECS service'
       );
     }
   }

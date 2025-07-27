@@ -205,6 +205,38 @@ docker exited with status 125
 **Solution:**
 The project uses pre-built Lambda layers and does NOT require Docker. If you see Docker errors, ensure you're using the latest version of the code which includes pre-built layers for psycopg2.
 
+### Issue: EFS Mount Timeout in ECS Tasks
+
+**Symptoms:**
+```
+ResourceInitializationError: failed to invoke EFS utils commands to set up EFS volumes: stderr: Mount attempt 1/3 failed due to timeout after 15 sec
+```
+
+**Solution:**
+This has been fixed - EFS security groups now properly allow NFS traffic from ECS services. The fix includes:
+
+1. **Security group rules** - EFS now has proper ingress rules for port 2049 (NFS)
+2. **Platform version** - All ECS services use the latest Fargate platform version
+3. **Proper configuration** - Services only mount EFS when actually needed
+
+If you still encounter this error:
+
+1. **Check the security groups:**
+   ```bash
+   # Find the EFS security group
+   aws efs describe-mount-targets --file-system-id fs-xxxxx
+   
+   # Check security group rules
+   aws ec2 describe-security-groups --group-ids sg-xxxxx
+   ```
+
+2. **Verify ECS task role has EFS permissions:**
+   ```bash
+   aws ecs describe-task-definition --task-definition RagTaskDef
+   ```
+
+3. **Check if the service actually needs EFS** - The RAG service doesn't use EFS by default
+
 ## Runtime Issues
 
 ### Issue: LibreChat Container Won't Start

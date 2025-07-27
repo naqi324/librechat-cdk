@@ -56,6 +56,9 @@ export class ECSDeployment extends Construct {
       'Allow internal service communication'
     );
     
+    // Allow EFS mount for services that need it
+    props.storage.allowEfsMount(serviceSecurityGroup);
+    
     // Deploy supporting services first
     if (props.enableMeilisearch) {
       this.createMeilisearchService(props, serviceSecurityGroup);
@@ -160,6 +163,7 @@ export class ECSDeployment extends Construct {
         containerPort: 7700,
       },
       enableExecuteCommand: true,
+      platformVersion: ecs.FargatePlatformVersion.LATEST,
     });
     
     return service;
@@ -235,6 +239,7 @@ export class ECSDeployment extends Construct {
         containerPort: 8000,
       },
       enableExecuteCommand: true,
+      platformVersion: ecs.FargatePlatformVersion.LATEST,
     });
     
     // Allow database access
@@ -372,6 +377,7 @@ export class ECSDeployment extends Construct {
       securityGroups: [securityGroup],
       healthCheckGracePeriod: cdk.Duration.seconds(120),
       enableExecuteCommand: true,
+      platformVersion: ecs.FargatePlatformVersion.LATEST,
     });
     
     // Allow database access
