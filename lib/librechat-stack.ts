@@ -228,6 +228,7 @@ export class LibreChatStack extends cdk.Stack {
   private createApplicationSecrets(props: LibreChatStackProps): secretsmanager.ISecret {
     // Create a secret with all required keys
     const secret = new secretsmanager.Secret(this, 'AppSecrets', {
+      secretName: `${cdk.Stack.of(this).stackName}-app-secrets-${Date.now()}`,
       description: 'LibreChat application secrets',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({}),

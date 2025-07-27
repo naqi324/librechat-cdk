@@ -19,20 +19,42 @@
 ```
 Resource handler returned message: "The operation failed because the secret librechat-development-postgres-secret already exists"
 ```
+or
+```
+You can't create this secret because a secret with this name is already scheduled for deletion.
+```
 
 **Solution:**
-This has been fixed - secrets now use the stack name which includes a unique identifier. If you encounter this with an old deployment:
+This has been fixed - secrets now use the stack name plus a timestamp for uniqueness. Each deployment creates new unique secrets. If you encounter this with an old deployment:
 
-1. **Delete the existing secret:**
+1. **Delete the existing secret immediately:**
    ```bash
+   # For postgres secrets
    aws secretsmanager delete-secret \
      --secret-id librechat-development-postgres-secret \
+     --force-delete-without-recovery
+   
+   # For app secrets
+   aws secretsmanager delete-secret \
+     --secret-id librechat-development-app-secrets \
      --force-delete-without-recovery
    ```
 
 2. **Or use the cleanup script:**
    ```bash
    ./scripts/cleanup-failed.sh
+   ```
+
+3. **For secrets scheduled for deletion:**
+   ```bash
+   # List all secrets scheduled for deletion
+   aws secretsmanager list-secrets --filters Key=tag-key,Values=aws:cloudformation:stack-name \
+     Key=tag-value,Values=LibreChatStack* --include-planned-deletion
+   
+   # Force delete them
+   aws secretsmanager list-secrets --include-planned-deletion | \
+     jq -r '.SecretList[] | select(.Name | contains("librechat")) | .ARN' | \
+     xargs -I {} aws secretsmanager delete-secret --secret-id {} --force-delete-without-recovery
    ```
 
 ### Issue: ECS Registry Authentication Error
