@@ -324,11 +324,11 @@ export class DatabaseConstruct extends Construct {
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
         layers: [
-          lambda.LayerVersion.fromLayerVersionArn(
-            this,
-            'PyMongoLayer',
-            `arn:aws:lambda:${cdk.Stack.of(this).region}:770693421928:layer:Klayers-p311-pymongo:1`
-          ),
+          new lambda.LayerVersion(this, 'PyMongoLayer', {
+            code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/pymongo/pymongo-layer.zip')),
+            compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
+            description: 'pymongo and dnspython for DocumentDB access',
+          }),
         ],
       });
       

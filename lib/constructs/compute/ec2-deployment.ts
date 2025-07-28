@@ -46,11 +46,11 @@ export class EC2Deployment extends Construct {
     // Create IAM role for EC2 instance
     const instanceRole = this.createInstanceRole(props);
     
-    // Create EC2 instance
-    this.instance = this.createInstance(props, instanceRole);
-    
-    // Create Application Load Balancer
+    // Create Application Load Balancer first (needed for instance user data)
     this.loadBalancer = this.createLoadBalancer(props, albSecurityGroup);
+    
+    // Create EC2 instance (can now reference loadBalancer)
+    this.instance = this.createInstance(props, instanceRole);
     
     // Configure target group and listener
     this.targetGroup = this.createTargetGroup(props);
