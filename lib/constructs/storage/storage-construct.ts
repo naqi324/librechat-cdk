@@ -35,9 +35,10 @@ export class StorageConstruct extends Construct {
     const stackName = cdk.Stack.of(this).stackName.toLowerCase();
     const account = cdk.Stack.of(this).account;
     const region = cdk.Stack.of(this).region;
+    const uniqueSuffix = Date.now().toString(36).slice(-4);
     
     const bucket = new s3.Bucket(this, 'DocumentBucket', {
-      bucketName: `${stackName}-docs-${account}-${region}`,
+      bucketName: `${stackName}-docs-${account}-${region}-${uniqueSuffix}`,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       versioned: true,

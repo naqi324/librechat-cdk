@@ -227,8 +227,9 @@ export class LibreChatStack extends cdk.Stack {
   
   private createApplicationSecrets(props: LibreChatStackProps): secretsmanager.ISecret {
     // Create a secret with all required keys
+    const uniqueSuffix = `${props.environment}-${Date.now().toString(36).slice(-4)}`;
     const secret = new secretsmanager.Secret(this, 'AppSecrets', {
-      secretName: `${cdk.Stack.of(this).stackName}-app-secrets`,
+      secretName: `${cdk.Stack.of(this).stackName}-app-secrets-${uniqueSuffix}`,
       description: 'LibreChat application secrets',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({}),
@@ -341,7 +342,7 @@ def handler(event, context):
     const provider = new cr.Provider(this, 'PopulateSecretsProvider', {
       onEventHandler: populateSecretsFunction,
       logRetention: logs.RetentionDays.ONE_DAY,
-      providerFunctionName: `${cdk.Stack.of(this).stackName}-populate-secrets-provider`,
+      providerFunctionName: `${cdk.Stack.of(this).stackName}-populate-secrets-provider-${uniqueSuffix}`,
     });
 
     const populateResource = new cdk.CustomResource(this, 'PopulateSecretsResource', {

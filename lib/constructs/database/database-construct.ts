@@ -27,8 +27,14 @@ export class DatabaseConstruct extends Construct {
   public readonly secrets: { [key: string]: secretsmanager.ISecret } = {};
   public readonly securityGroups: { [key: string]: ec2.ISecurityGroup } = {};
   
+  // Generate unique suffix for resource names to avoid conflicts
+  private readonly uniqueSuffix: string;
+  
   constructor(scope: Construct, id: string, props: DatabaseConstructProps) {
     super(scope, id);
+    
+    // Generate unique suffix using environment and a short hash
+    this.uniqueSuffix = `${props.environment}-${Date.now().toString(36).slice(-4)}`;
     
     // Create PostgreSQL database
     if (props.environment === 'production') {
@@ -112,7 +118,7 @@ export class DatabaseConstruct extends Construct {
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       defaultDatabaseName: 'librechat',
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret-${this.uniqueSuffix}`,
       }),
       removalPolicy: props.environment === 'production' 
         ? cdk.RemovalPolicy.RETAIN 
@@ -170,7 +176,7 @@ export class DatabaseConstruct extends Construct {
         ? cdk.RemovalPolicy.RETAIN 
         : cdk.RemovalPolicy.DESTROY,
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret-${this.uniqueSuffix}`,
       }),
       multiAz: false,
       publiclyAccessible: false,
@@ -213,7 +219,7 @@ export class DatabaseConstruct extends Construct {
       cloudWatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       masterUser: {
         username: 'docdbadmin',
-        secretName: `${cdk.Stack.of(this).stackName}-documentdb-secret`,
+        secretName: `${cdk.Stack.of(this).stackName}-documentdb-secret-${this.uniqueSuffix}`,
       },
     });
     
