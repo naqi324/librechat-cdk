@@ -237,7 +237,7 @@ export class DatabaseConstruct extends Construct {
         description: 'psycopg2-binary for PostgreSQL access',
       });
       
-      const initPostgresFunction = new lambda.Function(this, 'InitPostgresFunction', {
+      const initPostgresFunction = new lambda.Function(this, 'InitPgFn', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_postgres.handler',
         code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-postgres')),
@@ -277,12 +277,12 @@ export class DatabaseConstruct extends Construct {
       }
       
       // Create custom resource to trigger initialization
-      const provider = new cr.Provider(this, 'InitPostgresProvider', {
+      const provider = new cr.Provider(this, 'InitPgProvider', {
         onEventHandler: initPostgresFunction,
         logRetention: logs.RetentionDays.ONE_DAY,
       });
       
-      const initResource = new cdk.CustomResource(this, 'InitPostgresResource', {
+      const initResource = new cdk.CustomResource(this, 'InitPgResource', {
         serviceToken: provider.serviceToken,
         properties: {
           Version: '1.0', // Change this to trigger reinitialization
@@ -303,7 +303,7 @@ export class DatabaseConstruct extends Construct {
     
     // Initialize DocumentDB
     if (this.documentDbCluster && this.secrets['documentdb'] && this.securityGroups['documentdb'] && this.endpoints['documentdb']) {
-      const initDocdbFunction = new lambda.Function(this, 'InitDocdbFunction', {
+      const initDocdbFunction = new lambda.Function(this, 'InitDocFn', {
         runtime: lambda.Runtime.PYTHON_3_11,
         handler: 'init_docdb.handler',
         code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-docdb')),
@@ -311,7 +311,7 @@ export class DatabaseConstruct extends Construct {
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
-        securityGroups: [new ec2.SecurityGroup(this, 'InitDocdbLambdaSG', {
+        securityGroups: [new ec2.SecurityGroup(this, 'InitDocSG', {
           vpc: props.vpc,
           description: 'Security group for DocumentDB initialization Lambda',
           allowAllOutbound: true,
@@ -345,12 +345,12 @@ export class DatabaseConstruct extends Construct {
       }
       
       // Create custom resource to trigger initialization
-      const provider = new cr.Provider(this, 'InitDocdbProvider', {
+      const provider = new cr.Provider(this, 'InitDocProvider', {
         onEventHandler: initDocdbFunction,
         logRetention: logs.RetentionDays.ONE_DAY,
       });
       
-      new cdk.CustomResource(this, 'InitDocdbResource', {
+      new cdk.CustomResource(this, 'InitDocResource', {
         serviceToken: provider.serviceToken,
         properties: {
           Version: '1.0', // Change this to trigger reinitialization

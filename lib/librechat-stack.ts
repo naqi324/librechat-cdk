@@ -240,7 +240,7 @@ export class LibreChatStack extends cdk.Stack {
     });
 
     // Create a Lambda function to populate additional secret keys
-    const populateSecretsFunction = new lambda.Function(this, 'PopulateSecretsFunction', {
+    const populateSecretsFunction = new lambda.Function(this, 'PopSecFn', {
       runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.handler',
       code: lambda.Code.fromInline(`
@@ -342,7 +342,7 @@ def handler(event, context):
     const provider = new cr.Provider(this, 'PopulateSecretsProvider', {
       onEventHandler: populateSecretsFunction,
       logRetention: logs.RetentionDays.ONE_DAY,
-      providerFunctionName: `${cdk.Stack.of(this).stackName}-populate-secrets-provider-${uniqueSuffix}`,
+      providerFunctionName: `${cdk.Stack.of(this).stackName}-pop-sec-${uniqueSuffix}`,
     });
 
     const populateResource = new cdk.CustomResource(this, 'PopulateSecretsResource', {
