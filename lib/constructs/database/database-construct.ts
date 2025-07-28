@@ -261,11 +261,14 @@ export class DatabaseConstruct extends Construct {
       // Grant permissions
       this.secrets['postgres'].grantRead(initPostgresFunction);
       // Always add the ingress rule using the Lambda's security group
-      this.securityGroups['postgres'].addIngressRule(
-        initPostgresFunction.connections.securityGroups[0],
-        ec2.Port.tcp(5432),
-        'Allow Lambda to initialize database'
-      );
+      const lambdaSecurityGroup = initPostgresFunction.connections.securityGroups[0];
+      if (lambdaSecurityGroup) {
+        this.securityGroups['postgres'].addIngressRule(
+          lambdaSecurityGroup,
+          ec2.Port.tcp(5432),
+          'Allow Lambda to initialize database'
+        );
+      }
       
       // Create custom resource to trigger initialization
       const provider = new cr.Provider(this, 'InitPostgresProvider', {
@@ -326,11 +329,14 @@ export class DatabaseConstruct extends Construct {
       // Grant permissions
       this.secrets['documentdb'].grantRead(initDocdbFunction);
       // Always add the ingress rule using the Lambda's security group
-      this.securityGroups['documentdb'].addIngressRule(
-        initDocdbFunction.connections.securityGroups[0],
-        ec2.Port.tcp(27017),
-        'Allow Lambda to initialize database'
-      );
+      const docdbLambdaSecurityGroup = initDocdbFunction.connections.securityGroups[0];
+      if (docdbLambdaSecurityGroup) {
+        this.securityGroups['documentdb'].addIngressRule(
+          docdbLambdaSecurityGroup,
+          ec2.Port.tcp(27017),
+          'Allow Lambda to initialize database'
+        );
+      }
       
       // Create custom resource to trigger initialization
       const provider = new cr.Provider(this, 'InitDocdbProvider', {
