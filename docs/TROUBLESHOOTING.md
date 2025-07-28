@@ -1,5 +1,19 @@
 # LibreChat CDK Troubleshooting Guide
 
+This guide covers common issues and their solutions when deploying LibreChat using AWS CDK.
+
+## Recent Fixes Applied
+
+The following issues have been addressed in the latest version:
+- ✅ DocumentDB instance type compatibility (now uses t3.medium minimum)
+- ✅ Lambda function security group configuration for database access
+- ✅ VPC endpoint for Secrets Manager to fix Lambda connectivity
+- ✅ Database initialization timeout (increased to 15 minutes with exponential backoff)
+- ✅ Secret naming conflicts (now uses stack names for uniqueness)
+- ✅ S3 bucket global uniqueness (includes account and region)
+- ✅ EFS mount timeout (proper NFS security group rules)
+- ✅ MONGO_URI missing (deployment now includes DocumentDB by default)
+
 ## Table of Contents
 
 1. [Deployment Issues](#deployment-issues)
@@ -89,6 +103,19 @@ This has been fixed - the app secrets now properly include all required keys (jw
      }'
    ```
 
+### Issue: DocumentDB Invalid Instance Type
+
+**Symptoms:**
+```
+RDS does not support creating a DB instance with the following combination: DBInstanceClass=db.t3.small, Engine=docdb
+```
+
+**Solution:**
+AWS DocumentDB does not support db.t3.small instances. The minimum T3 instance type is db.t3.medium. This has been fixed in the configuration. If you encounter this error:
+
+1. **Ensure your configuration uses db.t3.medium or larger for DocumentDB**
+2. **For cost optimization in development**, consider using only PostgreSQL without DocumentDB
+
 ### Issue: S3 Bucket Name Already Exists
 
 **Symptoms:**
@@ -97,7 +124,7 @@ Bucket with name 'librechat-development-123456789012-us-east-1' already exists
 ```
 
 **Solution:**
-This has been fixed - S3 buckets now use the stack name plus a unique hash for global uniqueness. If you encounter this with an old deployment:
+This has been fixed - S3 buckets now use the stack name plus account and region for global uniqueness. If you encounter this with an old deployment:
 
 1. **Delete the existing bucket (if empty):**
    ```bash
@@ -398,15 +425,24 @@ CREATE_FAILED | AWS::CloudFormation::CustomResource | Database/InitPostgresResou
 **Solutions:**
 
 1. **RDS takes 5-10 minutes to start** - This is normal for first deployment
-2. **The fix has been applied** - Lambda timeout increased to 15 minutes, retries increased to 60
+2. **Multiple fixes have been applied:**
+   - Lambda timeout increased to 15 minutes
+   - Retries increased to 90 with exponential backoff
+   - Added proper security group configuration for Lambda functions
+   - Added VPC endpoint for Secrets Manager access
+   - Improved error handling and connection parameters
 3. **If still failing**, check CloudWatch logs:
    ```bash
    aws logs tail /aws/lambda/LibreChatStack-development-DatabaseInitPostgresFunc
    ```
-4. **Manual initialization option:**
+4. **Common causes:**
+   - **Security group misconfiguration** - Lambda must have access to RDS on port 5432
+   - **Secrets Manager access** - Lambda needs VPC endpoint or NAT gateway for Secrets Manager
+   - **SSL requirement** - RDS requires SSL connections (sslmode='require')
+5. **Manual initialization option:**
    ```bash
    # Connect to RDS after deployment completes:
-   psql -h <rds-endpoint> -U postgres -d librechat
+   psql -h <rds-endpoint> -U postgres -d librechat -p 5432
    # Then run:
    CREATE EXTENSION IF NOT EXISTS vector;
    ```
@@ -758,6 +794,43 @@ fields @timestamp, memoryUsed
 | filter @type = "metric"
 | stats avg(memoryUsed) by bin(5m)
 ```
+
+## Lambda Initialization Issues
+
+### Issue: Lambda Cannot Access Secrets Manager
+
+**Symptoms:**
+```
+Error retrieving secret: An error occurred (NetworkingError) when calling the GetSecretValue operation
+```
+
+**Solution:**
+The VPC endpoint for Secrets Manager has been added to all deployments. If you still encounter this:
+
+1. **Verify VPC endpoint exists:**
+   ```bash
+   aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=vpc-xxxxx" --query "VpcEndpoints[?ServiceName=='com.amazonaws.region.secretsmanager']"
+   ```
+
+2. **Check Lambda security group:**
+   - Lambda functions now have explicit security groups with outbound access
+   - Database security groups allow inbound access from Lambda security groups
+
+3. **For existing stacks**, redeploy to apply the fixes:
+   ```bash
+   npm run deploy
+   ```
+
+### Issue: Lambda Function Timeout During Database Init
+
+**Symptoms:**
+- CloudFormation stack stuck at Database/InitPostgresResource
+- Lambda function times out after 15 minutes
+
+**Solution:**
+1. **Exponential backoff** has been implemented with 90 retry attempts
+2. **Better error handling** distinguishes between authentication failures and connectivity issues
+3. **Race condition handling** for concurrent database creation attempts
 
 ## Getting Help
 

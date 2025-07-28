@@ -22,7 +22,13 @@ def get_db_credentials(secret_id):
         return secret
     except Exception as e:
         logger.error(f"Error retrieving secret: {str(e)}")
-        raise
+        # Add more context to the error
+        if 'AccessDeniedException' in str(e):
+            raise Exception(f"Access denied to secret {secret_id}. Check Lambda IAM role permissions.")
+        elif 'ResourceNotFoundException' in str(e):
+            raise Exception(f"Secret {secret_id} not found. Verify the secret exists.")
+        else:
+            raise Exception(f"Failed to retrieve secret {secret_id}: {str(e)}")
 
 
 def wait_for_db(host, port, username, password, max_retries=30, retry_delay=10):
@@ -141,12 +147,34 @@ def handler(event, context):
     """Lambda handler for DocumentDB initialization"""
     logger.info(f"Received event: {json.dumps(event)}")
     
+    # Initialize response for CloudFormation
+    response_data = {}
+    physical_resource_id = event.get('PhysicalResourceId', 'docdb-init')
+    
+    # Handle CloudFormation custom resource lifecycle
+    request_type = event.get('RequestType')
+    if request_type in ['Delete', 'Update']:
+        logger.info(f"Handling {request_type} request - no action needed for database initialization")
+        # For Delete, we don't want to fail even if there are issues
+        try:
+            if request_type == 'Delete':
+                logger.info("Delete request received - database resources will be cleaned up by CloudFormation")
+        except Exception as e:
+            logger.warning(f"Non-critical error during {request_type}: {str(e)}")
+        
+        return {
+            'PhysicalResourceId': physical_resource_id,
+            'Data': {'Message': f'{request_type} completed successfully'}
+        }
+    
     try:
         # Get database connection details from environment or event
-        db_host = event.get('DBHost', os.environ.get('DB_HOST'))
-        db_port = event.get('DBPort', os.environ.get('DB_PORT', '27017'))
-        db_name = event.get('DBName', os.environ.get('DB_NAME', 'librechat'))
-        secret_id = event.get('SecretId', os.environ.get('DB_SECRET_ID'))
+        # Priority: ResourceProperties (from CloudFormation) > Direct event properties > Environment variables
+        resource_props = event.get('ResourceProperties', {})
+        db_host = resource_props.get('DBHost', event.get('DBHost', os.environ.get('DB_HOST')))
+        db_port = resource_props.get('DBPort', event.get('DBPort', os.environ.get('DB_PORT', '27017')))
+        db_name = resource_props.get('DBName', event.get('DBName', os.environ.get('DB_NAME', 'librechat')))
+        secret_id = resource_props.get('SecretId', event.get('SecretId', os.environ.get('DB_SECRET_ID')))
         
         if not db_host:
             raise ValueError("Database host not provided")
@@ -204,6 +232,26 @@ def handler(event, context):
         
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        # Clean up connection if it exists
+        if 'client' in locals() and client:
+            try:
+                client.close()
+                logger.info("DocumentDB connection closed")
+            except Exception as close_error:
+                logger.warning(f"Error closing connection: {str(close_error)}")
+        
+        # For Delete operations, don't fail
+        if request_type == 'Delete':
+            logger.warning(f"Error during Delete operation (non-fatal): {str(e)}")
+            return {
+                'PhysicalResourceId': physical_resource_id,
+                'Data': {'Message': 'Delete completed (with warnings)'}
+            }
         
         response = {
             'statusCode': 500,
@@ -213,7 +261,7 @@ def handler(event, context):
         }
         
         if event.get('RequestType'):
-            response['PhysicalResourceId'] = 'docdb-init-failed'
+            response['PhysicalResourceId'] = physical_resource_id
             response['Reason'] = str(e)
         
         raise

@@ -1,6 +1,6 @@
 #!/bin/bash
-# LibreChat CDK Complete Setup and Deployment Script
-# This script handles everything from initial setup to deployment
+# LibreChat CDK Deployment Script
+# Unified deployment tool with multiple modes and options
 
 set -e
 
@@ -9,15 +9,109 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+# Default values
+FAST_MODE=false
+PERSISTENT_MODE=false
+CONFIG_FILE=""
+SKIP_WIZARD=false
+SHOW_HELP=false
+VERBOSE_MODE=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--fast)
+            FAST_MODE=true
+            shift
+            ;;
+        -p|--persistent)
+            PERSISTENT_MODE=true
+            shift
+            ;;
+        -c|--config)
+            CONFIG_FILE="$2"
+            SKIP_WIZARD=true
+            shift 2
+            ;;
+        -v|--verbose)
+            VERBOSE_MODE=true
+            shift
+            ;;
+        -h|--help)
+            SHOW_HELP=true
+            shift
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            SHOW_HELP=true
+            shift
+            ;;
+    esac
+done
+
+# Show help if requested
+if [ "$SHOW_HELP" = true ]; then
+    echo -e "${BLUE}LibreChat CDK Deployment Script${NC}"
+    echo
+    echo "Usage: $0 [OPTIONS]"
+    echo
+    echo "Options:"
+    echo "  -f, --fast          Fast deployment mode (smaller resources, hotswap updates)"
+    echo "  -p, --persistent    Run in persistent session (screen/tmux) for CloudShell"
+    echo "  -c, --config FILE   Use existing configuration file (skip wizard)"
+    echo "  -v, --verbose       Show detailed deployment progress with descriptions"
+    echo "  -h, --help          Show this help message"
+    echo
+    echo "Examples:"
+    echo "  $0                  # Interactive setup wizard"
+    echo "  $0 --fast           # Fast deployment mode"
+    echo "  $0 --persistent     # Protected from disconnection"
+    echo "  $0 --config .env    # Use existing configuration"
+    echo
+    exit 0
+fi
+
+# Handle persistent mode
+if [ "$PERSISTENT_MODE" = true ]; then
+    # Check if already in screen/tmux
+    if [ -n "$STY" ]; then
+        echo -e "${GREEN}✓ Already in screen session${NC}"
+    elif [ -n "$TMUX" ]; then
+        echo -e "${GREEN}✓ Already in tmux session${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Starting persistent session...${NC}"
+        echo "If disconnected, reconnect with: screen -r librechat-deploy"
+        echo "Press Enter to continue..."
+        read
+        
+        # Re-run this script inside screen with all original arguments
+        ORIGINAL_ARGS="$@"
+        exec screen -S librechat-deploy "$0" $ORIGINAL_ARGS
+    fi
+fi
 
 # Banner
 echo -e "${BLUE}"
 echo "╔═══════════════════════════════════════════════╗"
-echo "║       LibreChat CDK Setup & Deployment        ║"
-echo "║         One-Click Enterprise Setup            ║"
+echo "║          LibreChat CDK Deployment             ║"
+echo "║         Enterprise AWS Deployment             ║"
 echo "╚═══════════════════════════════════════════════╝"
 echo -e "${NC}"
+
+# Show mode indicators
+if [ "$FAST_MODE" = true ]; then
+    echo -e "${CYAN}🚀 Fast Mode Enabled${NC}"
+fi
+if [ "$PERSISTENT_MODE" = true ]; then
+    echo -e "${CYAN}🔒 Persistent Session Active${NC}"
+fi
+if [ "$SKIP_WIZARD" = true ] && [ -n "$CONFIG_FILE" ]; then
+    echo -e "${CYAN}📋 Using configuration: $CONFIG_FILE${NC}"
+fi
+echo
 
 # Function to print colored output
 print_status() {
@@ -50,6 +144,39 @@ prompt_with_default() {
     fi
     eval "$var_name='$value'"
 }
+
+# Quick validation checks
+echo -e "\n${BLUE}🔍 Running Pre-deployment Checks${NC}"
+echo "================================="
+
+# Check for failed stacks
+FAILED_STACKS=$(aws cloudformation list-stacks \
+    --query "StackSummaries[?contains(StackName, 'LibreChat') && (contains(StackStatus, 'FAILED') || contains(StackStatus, 'ROLLBACK'))].{Name:StackName,Status:StackStatus}" \
+    --output text 2>/dev/null || echo "")
+
+if [ ! -z "$FAILED_STACKS" ]; then
+    print_warning "Found stacks in failed state:"
+    echo "$FAILED_STACKS" | while read line; do
+        echo "  - $line"
+    done
+    echo
+    echo "To clean up failed stacks, run: ./scripts/cleanup.sh -m rollback-fix"
+    echo
+    read -p "Continue anyway? (y/n) [n]: " continue_deploy
+    if [ "$continue_deploy" != "y" ]; then
+        exit 1
+    fi
+fi
+
+# Check CDK bootstrap
+BOOTSTRAP_STATUS=$(aws cloudformation describe-stacks --stack-name CDKToolkit --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND")
+if [ "$BOOTSTRAP_STATUS" == "NOT_FOUND" ]; then
+    print_warning "CDK not bootstrapped. Will bootstrap during deployment."
+elif [[ "$BOOTSTRAP_STATUS" != "CREATE_COMPLETE" && "$BOOTSTRAP_STATUS" != "UPDATE_COMPLETE" ]]; then
+    print_error "CDK bootstrap stack in bad state: $BOOTSTRAP_STATUS"
+    echo "Run: ./scripts/manage-bootstrap.sh fix"
+    exit 1
+fi
 
 # Check prerequisites
 echo -e "\n${BLUE}📋 Checking Prerequisites${NC}"
@@ -112,12 +239,97 @@ else
     print_status "AWS CDK CLI found"
 fi
 
-# Acknowledge CDK notices
-npx cdk acknowledge 34892 2>/dev/null || true
-npx cdk acknowledge 32775 2>/dev/null || true
+# Acknowledge CDK notices to reduce output noise
+npx cdk acknowledge 34892 2>/dev/null || true  # CDK telemetry
+npx cdk acknowledge 32775 2>/dev/null || true  # CLI version divergence
 
-# Check for existing configuration
-if [ -f .env ]; then
+# Handle configuration
+if [ "$SKIP_WIZARD" = true ] && [ -n "$CONFIG_FILE" ]; then
+    # Use specified config file
+    if [ ! -f "$CONFIG_FILE" ]; then
+        print_error "Configuration file not found: $CONFIG_FILE"
+        exit 1
+    fi
+    print_status "Loading configuration from $CONFIG_FILE"
+    source "$CONFIG_FILE"
+    
+    # Validate EC2 key pair if needed
+    if [ "$DEPLOYMENT_MODE" = "EC2" ] && [ ! -z "$KEY_PAIR_NAME" ] && [ "$HAS_AWS_CLI" = true ]; then
+        if ! aws ec2 describe-key-pairs --key-names "$KEY_PAIR_NAME" &>/dev/null; then
+            print_error "Key pair not found: $KEY_PAIR_NAME"
+            echo "Create it with: aws ec2 create-key-pair --key-name $KEY_PAIR_NAME --query 'KeyMaterial' --output text > $KEY_PAIR_NAME.pem"
+            exit 1
+        fi
+    fi
+    
+    # Jump directly to deployment
+    echo -e "\n${BLUE}📦 Building Project${NC}"
+    npm run build
+    
+    echo -e "\n${BLUE}🔧 Bootstrapping CDK${NC}"
+    ./scripts/manage-bootstrap.sh fix || {
+        echo -e "${RED}Bootstrap failed. Run: ./scripts/manage-bootstrap.sh clean${NC}"
+        exit 1
+    }
+    
+    echo -e "\n${BLUE}🚀 Deploying Stack${NC}"
+    if [ "$FAST_MODE" = true ]; then
+        # Check if stack exists for hotswap
+        STACK_EXISTS=$(aws cloudformation describe-stacks --stack-name "LibreChatStack-${DEPLOYMENT_ENV:-development}" 2>/dev/null || echo "")
+        
+        if [ ! -z "$STACK_EXISTS" ]; then
+            echo -e "${CYAN}Using CDK hotswap for faster updates...${NC}"
+            npx cdk deploy --hotswap --all
+        else
+            echo -e "${CYAN}Using fast deployment settings...${NC}"
+            FAST_DEPLOY=true npx cdk deploy --all --concurrency 10 --require-approval never -c fastDeploy=true
+        fi
+    elif [ "$VERBOSE_MODE" = true ]; then
+        echo -e "${CYAN}Deploying with verbose output...${NC}"
+        echo -e "${YELLOW}This process will:${NC}"
+        echo "  1. Create/update VPC and networking resources"
+        echo "  2. Set up RDS PostgreSQL database with pgvector (5-10 min)"
+        echo "  3. Deploy Lambda functions for initialization"
+        echo "  4. Launch compute resources (EC2/ECS)"
+        echo "  5. Configure load balancer and monitoring"
+        echo
+        
+        npx cdk deploy --all --require-approval never --progress events 2>&1 | while IFS= read -r line; do
+            # Parse and enhance CDK output
+            if [[ "$line" == *"CREATE_IN_PROGRESS"* ]]; then
+                if [[ "$line" == *"AWS::EC2::VPC"* ]]; then
+                    echo -e "${BLUE}🌐 Creating Virtual Private Cloud (VPC)...${NC}"
+                elif [[ "$line" == *"AWS::RDS::DBInstance"* ]] || [[ "$line" == *"AWS::RDS::DBCluster"* ]]; then
+                    echo -e "${BLUE}🗄️  Creating PostgreSQL database (this takes 5-10 minutes)...${NC}"
+                elif [[ "$line" == *"AWS::Lambda::Function"* ]]; then
+                    echo -e "${BLUE}⚡ Creating Lambda functions...${NC}"
+                elif [[ "$line" == *"AWS::ECS::Cluster"* ]]; then
+                    echo -e "${BLUE}🐳 Creating ECS cluster...${NC}"
+                elif [[ "$line" == *"AWS::EC2::Instance"* ]]; then
+                    echo -e "${BLUE}💻 Launching EC2 instance...${NC}"
+                elif [[ "$line" == *"AWS::ElasticLoadBalancingV2::LoadBalancer"* ]]; then
+                    echo -e "${BLUE}⚖️  Creating Application Load Balancer...${NC}"
+                elif [[ "$line" == *"AWS::S3::Bucket"* ]]; then
+                    echo -e "${BLUE}📦 Creating S3 storage bucket...${NC}"
+                fi
+            elif [[ "$line" == *"CREATE_COMPLETE"* ]] && [[ "$line" == *"AWS::CloudFormation::Stack"* ]]; then
+                echo -e "${GREEN}✅ Stack deployment completed!${NC}"
+            elif [[ "$line" == *"UPDATE_COMPLETE"* ]] && [[ "$line" == *"AWS::CloudFormation::Stack"* ]]; then
+                echo -e "${GREEN}✅ Stack update completed!${NC}"
+            elif [[ "$line" == *"failed"* ]] || [[ "$line" == *"FAILED"* ]]; then
+                echo -e "${RED}$line${NC}"
+            else
+                echo "$line"
+            fi
+        done
+    else
+        npx cdk deploy --all
+    fi
+    
+    print_status "Deployment complete!"
+    exit 0
+elif [ -f .env ] && [ "$SKIP_WIZARD" = false ]; then
+    # Existing .env found, ask user
     echo -e "\n${YELLOW}⚠️  Existing Configuration Found${NC}"
     echo "================================"
     echo "An .env file already exists with the following configuration:"
@@ -150,12 +362,38 @@ if [ -f .env ]; then
             }
             
             echo -e "\n${BLUE}🚀 Deploying Stack${NC}"
-            npm run deploy:verbose
+            if [ "$FAST_MODE" = true ]; then
+                # Check if stack exists for hotswap
+                STACK_EXISTS=$(aws cloudformation describe-stacks --stack-name "LibreChatStack-${DEPLOYMENT_ENV:-development}" 2>/dev/null || echo "")
+                
+                if [ ! -z "$STACK_EXISTS" ]; then
+                    echo -e "${CYAN}Using CDK hotswap for faster updates...${NC}"
+                    npx cdk deploy --hotswap --all
+                else
+                    echo -e "${CYAN}Using fast deployment settings...${NC}"
+                    FAST_DEPLOY=true npx cdk deploy --all --concurrency 10 --require-approval never -c fastDeploy=true
+                fi
+            elif [ "$VERBOSE_MODE" = true ]; then
+                echo -e "${CYAN}Deploying with verbose output...${NC}"
+                npx cdk deploy --all --require-approval never --progress events 2>&1 | while IFS= read -r line; do
+                    if [[ "$line" == *"CREATE_IN_PROGRESS"* ]] || [[ "$line" == *"UPDATE_IN_PROGRESS"* ]]; then
+                        echo -e "${BLUE}⏳ $line${NC}"
+                    elif [[ "$line" == *"COMPLETE"* ]]; then
+                        echo -e "${GREEN}✅ $line${NC}"
+                    elif [[ "$line" == *"FAILED"* ]]; then
+                        echo -e "${RED}❌ $line${NC}"
+                    else
+                        echo "$line"
+                    fi
+                done
+            else
+                npx cdk deploy --all
+            fi
             
             print_status "Deployment complete!"
         else
             echo -e "\n${GREEN}Setup complete! To deploy later, run:${NC}"
-            echo "  npm run deploy:verbose"
+            echo "  ./deploy.sh --config .env"
         fi
         exit 0
     else
@@ -205,6 +443,15 @@ if [ "$mode_choice" = "2" ]; then
             if [ -z "$KEY_PAIR_NAME" ]; then
                 print_error "Key pair name is required for EC2 deployment"
                 exit 1
+            fi
+            # Validate the key pair exists
+            if [ "$HAS_AWS_CLI" = true ]; then
+                if ! aws ec2 describe-key-pairs --key-names "$KEY_PAIR_NAME" &>/dev/null; then
+                    print_error "Key pair '$KEY_PAIR_NAME' not found in AWS"
+                    echo "Please create it first or choose option 2 to create a new one"
+                    exit 1
+                fi
+                print_status "Key pair validated: $KEY_PAIR_NAME"
             fi
             ;;
         2)
@@ -383,7 +630,7 @@ echo "======================="
 cat > .env << EOF
 # LibreChat CDK Configuration
 # Generated on $(date)
-# Run 'npm run deploy:verbose' to deploy this configuration
+# Run './deploy.sh --config .env' to deploy this configuration
 
 # Deployment Settings
 DEPLOYMENT_ENV=$DEPLOYMENT_ENV
@@ -482,7 +729,39 @@ if [ "$deploy_now" = "y" ]; then
     # Deploy
     echo -e "\n${BLUE}🚀 Deploying Stack${NC}"
     echo "=================="
-    npm run deploy:verbose
+    
+    if [ "$FAST_MODE" = true ]; then
+        echo -e "${CYAN}Using fast deployment mode...${NC}"
+        # Check if stack exists for hotswap
+        STACK_EXISTS=$(aws cloudformation describe-stacks --stack-name "LibreChatStack-${DEPLOYMENT_ENV:-development}" 2>/dev/null || echo "")
+        
+        if [ ! -z "$STACK_EXISTS" ]; then
+            echo "Detected existing stack - using CDK hotswap for faster updates"
+            echo "This will take approximately 5-10 minutes..."
+            npx cdk deploy --hotswap --all
+        else
+            echo "New deployment - using optimized settings"
+            echo "This will take approximately 10-15 minutes..."
+            FAST_DEPLOY=true npx cdk deploy --all --concurrency 10 --require-approval never -c fastDeploy=true
+        fi
+    else
+        echo "This will take approximately 15-20 minutes..."
+        if [ "$VERBOSE_MODE" = true ]; then
+            npx cdk deploy --all --require-approval never --progress events 2>&1 | while IFS= read -r line; do
+                if [[ "$line" == *"CREATE_IN_PROGRESS"* ]] || [[ "$line" == *"UPDATE_IN_PROGRESS"* ]]; then
+                    echo -e "${BLUE}⏳ $line${NC}"
+                elif [[ "$line" == *"COMPLETE"* ]]; then
+                    echo -e "${GREEN}✅ $line${NC}"
+                elif [[ "$line" == *"FAILED"* ]]; then
+                    echo -e "${RED}❌ $line${NC}"
+                else
+                    echo "$line"
+                fi
+            done
+        else
+            npx cdk deploy --all
+        fi
+    fi
     
     echo -e "\n${GREEN}✨ Deployment Complete!${NC}"
     echo "======================="
@@ -502,11 +781,15 @@ else
     echo
     echo "Your configuration has been saved. To deploy later:"
     echo
-    echo "  npm run deploy:verbose"
+    echo "  ./deploy.sh --config .env"
+    echo
+    echo "With options:"
+    echo "  ./deploy.sh --config .env --fast       # Fast deployment"
+    echo "  ./deploy.sh --config .env --persistent  # CloudShell safe"
     echo
     echo "To modify configuration:"
     echo "  - Edit .env file"
-    echo "  - Run ./setup.sh again"
+    echo "  - Run ./deploy.sh again"
     echo
     echo "For advanced options, see README.md"
 fi
@@ -518,5 +801,6 @@ echo "- Monitor deployment: AWS CloudFormation console"
 echo "- View logs: AWS CloudWatch"
 echo "- Access application: Check stack outputs for URL"
 [ "$DEPLOYMENT_MODE" = "EC2" ] && echo "- SSH access: ssh -i ${KEY_PAIR_NAME}.pem ec2-user@<instance-ip>"
+echo "- Clean up resources: ./scripts/cleanup.sh"
 echo
-print_info "For troubleshooting, see DEPLOYMENT_GUIDE.md"
+print_info "For troubleshooting, see docs/TROUBLESHOOTING.md"

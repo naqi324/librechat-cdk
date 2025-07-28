@@ -83,11 +83,11 @@
 git clone https://github.com/your-org/librechat-cdk.git
 cd librechat-cdk
 
-# Run the setup script (handles everything from setup to deployment)
-./setup.sh
+# Run the deployment script (handles everything from setup to deployment)
+./deploy.sh
 ```
 
-The setup script will:
+The deployment script will:
 - ✅ Check prerequisites
 - ✅ Install dependencies
 - ✅ Configure your deployment
@@ -99,26 +99,21 @@ For manual deployment or advanced configuration, see the [Deployment Guide](DEPL
 ### Deployment Commands
 
 ```bash
-# Standard deployment (shows progress bar)
+# Standard deployment
 npm run deploy
 
-# Verbose deployment (detailed descriptions of each step)
-npm run deploy:verbose
+# Deployment with options
+./deploy.sh                    # Interactive wizard
+./deploy.sh --fast             # Fast mode with minimal resources
+./deploy.sh --verbose          # Show detailed progress
+./deploy.sh --config .env      # Use existing configuration
+./deploy.sh --persistent       # CloudShell safe (screen/tmux)
 
 # Deploy to specific environments
 npm run deploy:dev
 npm run deploy:staging
 npm run deploy:prod
 ```
-
-The verbose deployment mode provides:
-- 🌐 Creating VPC and networking resources
-- 🗄️ Setting up RDS PostgreSQL database
-- ⚡ Deploying Lambda functions
-- 🐳 Launching ECS containers or EC2 instances
-- ⚖️ Configuring load balancers
-- 📦 Creating storage buckets
-- 📊 Setting up monitoring
 
 ### Fast Deployment
 
@@ -193,8 +188,8 @@ To deploy without a key pair, use ECS deployment mode:
 export DEPLOYMENT_MODE=ECS
 npm run deploy
 
-# Method 2: Use setup script and select ECS
-./scripts/setup-deployment.sh
+# Method 2: Use deployment script and select ECS
+./deploy.sh
 ```
 
 ## 🎯 Deployment Options

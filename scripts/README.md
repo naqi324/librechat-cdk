@@ -1,13 +1,30 @@
 # Scripts Directory
 
-## Primary Setup Script
+## Primary Deployment Script
 
-**Use `./setup.sh` in the root directory** - This is the main setup and deployment script that handles everything:
+**Use `./deploy.sh` in the root directory** - This is the main deployment script that handles everything:
+- Pre-deployment validation (checks for failed stacks, CDK bootstrap status, key pairs)
 - Environment validation
 - Dependency installation
 - Interactive configuration
 - CDK bootstrap (via manage-bootstrap.sh)
 - Stack deployment
+
+**Options:**
+```bash
+./deploy.sh                    # Interactive setup wizard
+./deploy.sh --fast             # Fast deployment mode (minimal resources)
+./deploy.sh --persistent       # Run in screen/tmux (CloudShell safe)
+./deploy.sh --config .env      # Use existing configuration
+./deploy.sh --config .env --verbose  # With detailed output
+./deploy.sh --help             # Show all options
+```
+
+The script now includes built-in validation that:
+- Detects failed CloudFormation stacks and suggests cleanup
+- Validates CDK bootstrap status
+- Verifies EC2 key pairs exist before deployment
+- Checks Node.js version and other prerequisites
 
 ## Specialized Scripts
 
@@ -24,6 +41,9 @@ Unified CDK bootstrap management with multiple commands:
 
 # Clean and re-bootstrap
 ./scripts/manage-bootstrap.sh clean
+
+# Bootstrap with custom qualifier (avoids S3 conflicts)
+./scripts/manage-bootstrap.sh custom
 
 # Show help
 ./scripts/manage-bootstrap.sh help
@@ -46,11 +66,16 @@ node scripts/estimate-cost.js
 ```
 
 ### `cleanup.sh`
-Removes all deployed resources and performs thorough cleanup of the AWS account.
+Comprehensive cleanup tool for AWS resources - works in CloudShell without dependencies.
 ```bash
-./scripts/cleanup.sh
+./scripts/cleanup.sh                    # Standard cleanup
+./scripts/cleanup.sh -m deep            # Deep cleanup (all CDK resources)
+./scripts/cleanup.sh -m nuclear -f      # Delete everything (dangerous!)
+./scripts/cleanup.sh -m rollback-fix    # Fix stuck rollbacks
+./scripts/cleanup.sh -d                 # Dry run mode
+./scripts/cleanup.sh -r us-west-2       # Specific region
 ```
-**Warning:** This will delete all resources created by the stack!
+**Warning:** This will delete resources based on the mode selected!
 
 Comprehensive cleanup includes:
 
@@ -82,102 +107,12 @@ Comprehensive cleanup includes:
 - IAM roles and policies
 - Local build files (optional)
 
-### `deploy.sh`
-Advanced deployment script for CI/CD pipelines. Use this when you need:
-- Non-interactive deployments
-- Custom environment variables
-- Integration with CI/CD systems
-
-### `deploy-verbose.sh`
-Enhanced deployment script with descriptive output:
-```bash
-./scripts/deploy-verbose.sh
-# Or use npm script:
-npm run deploy:verbose
-```
-This script provides detailed descriptions of what's happening during deployment:
-- Creating VPC and networking resources
-- Setting up RDS PostgreSQL database (5-10 minutes)
-- Deploying Lambda functions
-- Launching compute resources
-- And much more!
-
-### `create-one-click-deploy.sh`
-Generates a CloudFormation template for one-click deployment via AWS Console.
-```bash
-./scripts/create-one-click-deploy.sh
-```
-
-### `bootstrap-with-custom-qualifier.sh`
-Bootstrap CDK with a unique qualifier to avoid global S3 naming conflicts.
-```bash
-./scripts/bootstrap-with-custom-qualifier.sh
-```
-Use this when you get "bucket already exists" errors during bootstrap.
-
-### `force-s3-cleanup.sh`
-Aggressive S3 bucket cleanup for stubborn CDK bootstrap issues.
-```bash
-./scripts/force-s3-cleanup.sh
-```
-Searches multiple regions and uses various methods to find and delete CDK S3 buckets.
-
-### `acknowledge-cdk-notices.sh`
-Acknowledge CDK CLI notices to suppress them in future runs.
-```bash
-./scripts/acknowledge-cdk-notices.sh
-```
-Acknowledges notices 34892 (telemetry) and 32775 (version divergence).
-
 ### `check-resources.sh`
-Comprehensive check for all LibreChat CDK resources in your AWS account.
+Check AWS resource usage and running costs across all regions.
 ```bash
 ./scripts/check-resources.sh
 ```
-Checks for:
-- CloudFormation stacks (including nested stacks)
-- ECS clusters, services, and task definitions
-- EC2 instances
-- RDS databases and clusters
-- S3 buckets
-- ECR repositories
-- IAM roles
-- Security groups
-- CloudWatch log groups
 
-### `force-stack-cleanup.sh`
-Force cleanup of stubborn CloudFormation stacks that fail to delete.
-```bash
-./scripts/force-stack-cleanup.sh <stack-name>
-```
-This script:
-- Identifies resources blocking stack deletion
-- Manually deletes problematic resources (S3 buckets, ECR repos, etc.)
-- Retries stack deletion
-- Useful for DELETE_FAILED stacks
-
-### `cleanup-failed.sh`
-Quick cleanup for all failed CDK deployments.
-```bash
-./scripts/cleanup-failed.sh
-```
-Automatically finds and deletes all stacks in failed states:
-- CREATE_FAILED
-- ROLLBACK_COMPLETE
-- UPDATE_ROLLBACK_COMPLETE
-- DELETE_FAILED
-- UPDATE_ROLLBACK_FAILED
-
-### `deep-clean-cdk.sh`
-Nuclear option - deletes ALL CDK stacks and resources.
-```bash
-./scripts/deep-clean-cdk.sh
-```
-**WARNING:** This will delete:
-- All CloudFormation stacks (any status)
-- CDK bootstrap stacks
-- All associated AWS resources
-- Orphaned CDK resources (S3 buckets, ECR repos)
 
 ## Script Organization
 
@@ -185,16 +120,16 @@ We've consolidated multiple bootstrap-related scripts into a single `manage-boot
 
 ## Typical Workflow
 
-1. **Initial Setup**: Run `./setup.sh` from the root directory
+1. **Initial Setup**: Run `./deploy.sh` from the root directory
 2. **Bootstrap Issues**: Use `./scripts/manage-bootstrap.sh` commands
 3. **Cost Estimation**: Run `./scripts/estimate-cost.ts` before deployment
 4. **Cleanup**: Use `./scripts/cleanup.sh` to remove all resources
 
 ## CI/CD Usage
 
-For automated deployments, use the `deploy.sh` script with environment variables:
+For automated deployments, use the deployment script with environment variables:
 ```bash
 export DEPLOYMENT_MODE=ECS
 export DEPLOYMENT_ENV=production
-./scripts/deploy.sh
+./deploy.sh --config .env
 ```

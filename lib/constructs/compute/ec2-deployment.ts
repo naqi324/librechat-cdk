@@ -532,14 +532,14 @@ export class EC2Deployment extends Construct {
       role: role,
       keyName: props.keyPairName,
       userData: userData,
-      userDataCausesReplacement: true,
+      userDataCausesReplacement: false, // Prevent instance replacement on user data changes
       blockDevices: [
         {
           deviceName: '/dev/xvda',
           volume: ec2.BlockDeviceVolume.ebs(100, {
             volumeType: ec2.EbsDeviceVolumeType.GP3,
             encrypted: true,
-            deleteOnTermination: true,
+            deleteOnTermination: props.environment !== 'production', // Retain volumes in production
           }),
         },
       ],
@@ -572,6 +572,13 @@ export class EC2Deployment extends Construct {
       },
       deletionProtection: props.environment === 'production',
     });
+    
+    // Apply removal policy
+    alb.applyRemovalPolicy(
+      props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY
+    );
     
     // Add tags
     cdk.Tags.of(alb).add('Name', `LibreChat-ALB-${props.environment}`);

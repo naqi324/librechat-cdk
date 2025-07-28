@@ -106,6 +106,15 @@ export class VpcConstruct extends Construct {
       ],
     });
     
+    // Secrets Manager endpoint is required for Lambda functions in isolated subnets
+    vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
+      service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      privateDnsEnabled: true,
+      subnets: {
+        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+      },
+    });
+    
     // Interface endpoints for production (these have costs)
     if (environment === 'production') {
       // ECR endpoints for container pulls
@@ -116,12 +125,6 @@ export class VpcConstruct extends Construct {
       
       vpc.addInterfaceEndpoint('EcrDockerEndpoint', {
         service: ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER,
-        privateDnsEnabled: true,
-      });
-      
-      // Secrets Manager endpoint
-      vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
-        service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
         privateDnsEnabled: true,
       });
       

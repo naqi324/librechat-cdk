@@ -71,10 +71,14 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
       maxCount: 3,
     },
     rds: {
-      instanceClass: 'db.t3.small',
+      instanceClass: 'db.t3.small',  // For RDS PostgreSQL
       allocatedStorage: 50,
       maxAllocatedStorage: 100,
       multiAz: false,
+    },
+    documentdb: {
+      instanceClass: 'db.t3.medium',  // Minimum supported for DocumentDB
+      instanceCount: 1,
     },
     estimatedMonthlyCost: 120,
   },

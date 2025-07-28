@@ -228,7 +228,7 @@ export class LibreChatStack extends cdk.Stack {
   private createApplicationSecrets(props: LibreChatStackProps): secretsmanager.ISecret {
     // Create a secret with all required keys
     const secret = new secretsmanager.Secret(this, 'AppSecrets', {
-      secretName: `${cdk.Stack.of(this).stackName}-app-secrets-${Date.now()}`,
+      secretName: `${cdk.Stack.of(this).stackName}-app-secrets`,
       description: 'LibreChat application secrets',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({}),
@@ -252,6 +252,27 @@ def handler(event, context):
     """
     Populate additional secret keys required by LibreChat
     """
+    import traceback
+    
+    # Initialize response for CloudFormation
+    physical_resource_id = event.get('PhysicalResourceId', 'secret-populate')
+    
+    # Handle CloudFormation custom resource lifecycle
+    request_type = event.get('RequestType')
+    if request_type in ['Delete', 'Update']:
+        print(f"Handling {request_type} request - no action needed for secret population")
+        # For Delete, we don't want to fail even if there are issues
+        try:
+            if request_type == 'Delete':
+                print("Delete request received - secrets will be cleaned up by CloudFormation")
+        except Exception as e:
+            print(f"Non-critical error during {request_type}: {str(e)}")
+        
+        return {
+            'PhysicalResourceId': physical_resource_id,
+            'Data': {'Message': f'{request_type} completed successfully'}
+        }
+    
     try:
         secret_id = event['ResourceProperties']['SecretId']
         enable_meilisearch = event['ResourceProperties'].get('EnableMeilisearch', 'false') == 'true'
@@ -288,6 +309,24 @@ def handler(event, context):
         }
     except Exception as e:
         print(f"Error: {str(e)}")
+        print(f"Full traceback: {traceback.format_exc()}")
+        
+        # For Delete operations, don't fail
+        if request_type == 'Delete':
+            print(f"Error during Delete operation (non-fatal): {str(e)}")
+            return {
+                'PhysicalResourceId': physical_resource_id,
+                'Data': {'Message': 'Delete completed (with warnings)'}
+            }
+        
+        # Return proper error for CloudFormation
+        if event.get('RequestType'):
+            return {
+                'PhysicalResourceId': physical_resource_id,
+                'Reason': f"{type(e).__name__}: {str(e)}",
+                'Status': 'FAILED'
+            }
+        
         raise
 `),
       timeout: cdk.Duration.minutes(1),
@@ -302,6 +341,7 @@ def handler(event, context):
     const provider = new cr.Provider(this, 'PopulateSecretsProvider', {
       onEventHandler: populateSecretsFunction,
       logRetention: logs.RetentionDays.ONE_DAY,
+      providerFunctionName: `${cdk.Stack.of(this).stackName}-populate-secrets-provider`,
     });
 
     const populateResource = new cdk.CustomResource(this, 'PopulateSecretsResource', {

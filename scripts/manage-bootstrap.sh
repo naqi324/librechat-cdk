@@ -30,6 +30,7 @@ show_help() {
     echo "  status    Check the current bootstrap status (default)"
     echo "  fix       Fix bootstrap issues interactively"
     echo "  clean     Clean all bootstrap resources and re-bootstrap"
+    echo "  custom    Bootstrap with custom qualifier (avoids conflicts)"
     echo "  help      Show this help message"
     echo
     echo "Examples:"
@@ -37,6 +38,21 @@ show_help() {
     echo "  $0 status       # Check status"
     echo "  $0 fix          # Fix bootstrap issues"
     echo "  $0 clean        # Clean and re-bootstrap"
+    echo "  $0 custom       # Use custom qualifier"
+}
+
+prompt_with_default() {
+    local prompt="$1"
+    local default="$2"
+    local var_name="$3"
+    
+    if [ -z "$default" ]; then
+        read -p "$prompt: " value
+    else
+        read -p "$prompt [$default]: " value
+        value="${value:-$default}"
+    fi
+    eval "$var_name='$value'"
 }
 
 check_aws_config() {
@@ -226,6 +242,91 @@ clean_bootstrap() {
     npx cdk bootstrap aws://${ACCOUNT_ID}/${REGION}
 }
 
+custom_bootstrap() {
+    echo -e "${BLUE}CDK Bootstrap with Custom Qualifier${NC}"
+    echo "===================================="
+    
+    check_aws_config
+    
+    echo -e "${YELLOW}⚠️  Using a custom qualifier helps avoid S3 bucket naming conflicts${NC}"
+    echo -e "${YELLOW}   when multiple users share the same AWS account.${NC}"
+    echo
+    echo "The qualifier must be:"
+    echo "  • 4-10 lowercase alphanumeric characters"
+    echo "  • Must start with a letter"
+    echo "  • Must be unique in your AWS account"
+    echo
+    
+    # Generate a suggested qualifier
+    SUGGESTED_QUALIFIER="lc$(date +%y%m%d)"
+    
+    while true; do
+        prompt_with_default "Enter custom qualifier" "$SUGGESTED_QUALIFIER" CUSTOM_QUALIFIER
+        
+        # Validate qualifier
+        if ! [[ "$CUSTOM_QUALIFIER" =~ ^[a-z][a-z0-9]{3,9}$ ]]; then
+            echo -e "${RED}Invalid qualifier. Must be 4-10 lowercase alphanumeric characters starting with a letter.${NC}"
+            continue
+        fi
+        
+        # Check if S3 bucket would conflict
+        TEST_BUCKET="cdk-${CUSTOM_QUALIFIER}-assets-${ACCOUNT_ID}-${REGION}"
+        echo "Testing bucket name: $TEST_BUCKET"
+        
+        if aws s3api head-bucket --bucket "$TEST_BUCKET" 2>/dev/null; then
+            echo -e "${RED}A bucket with this qualifier already exists: $TEST_BUCKET${NC}"
+            echo "Please choose a different qualifier."
+            continue
+        fi
+        
+        echo -e "${GREEN}✅ Qualifier is available${NC}"
+        break
+    done
+    
+    echo
+    echo -e "${BLUE}Bootstrap Configuration:${NC}"
+    echo "  Account: $ACCOUNT_ID"
+    echo "  Region: $REGION"
+    echo "  Qualifier: $CUSTOM_QUALIFIER"
+    echo "  S3 Bucket: cdk-${CUSTOM_QUALIFIER}-assets-${ACCOUNT_ID}-${REGION}"
+    echo "  ECR Repository: cdk-${CUSTOM_QUALIFIER}-container-assets-${ACCOUNT_ID}-${REGION}"
+    echo
+    
+    read -p "Proceed with bootstrap? (y/n) [y]: " proceed
+    proceed="${proceed:-y}"
+    
+    if [ "$proceed" != "y" ]; then
+        echo -e "${YELLOW}Bootstrap cancelled${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}Running CDK bootstrap with custom qualifier...${NC}"
+    
+    # Bootstrap with custom qualifier
+    npx cdk bootstrap aws://${ACCOUNT_ID}/${REGION} \
+        --qualifier $CUSTOM_QUALIFIER \
+        --toolkit-stack-name CDKToolkit-$CUSTOM_QUALIFIER || {
+        echo -e "${RED}Bootstrap failed${NC}"
+        return 1
+    }
+    
+    echo
+    echo -e "${GREEN}✅ Bootstrap complete!${NC}"
+    echo
+    echo -e "${YELLOW}IMPORTANT: You must now use this qualifier in your CDK deployments:${NC}"
+    echo
+    echo "  1. Set the environment variable:"
+    echo "     export CDK_QUALIFIER=$CUSTOM_QUALIFIER"
+    echo
+    echo "  2. Or add to your .env file:"
+    echo "     CDK_QUALIFIER=$CUSTOM_QUALIFIER"
+    echo
+    echo "  3. Or use in cdk.json:"
+    echo "     {\"context\": {\"@aws-cdk/core:bootstrapQualifier\": \"$CUSTOM_QUALIFIER\"}}"
+    echo
+    echo -e "${BLUE}The stack will automatically use this qualifier if you set CDK_QUALIFIER.${NC}"
+}
+
 # Main script logic
 case "${1:-status}" in
     status)
@@ -236,6 +337,9 @@ case "${1:-status}" in
         ;;
     clean)
         clean_bootstrap
+        ;;
+    custom)
+        custom_bootstrap
         ;;
     help|--help|-h)
         show_help

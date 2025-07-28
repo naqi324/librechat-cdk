@@ -51,7 +51,7 @@ export class DatabaseConstruct extends Construct {
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for Aurora PostgreSQL',
-      allowAllOutbound: false,
+      allowAllOutbound: true,  // Allow outbound for RDS to communicate with AWS services
     });
     this.securityGroups['postgres'] = securityGroup;
     
@@ -112,8 +112,11 @@ export class DatabaseConstruct extends Construct {
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       defaultDatabaseName: 'librechat',
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret-${Date.now()}`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
       }),
+      removalPolicy: props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
     });
     
     this.endpoints['postgres'] = this.postgresCluster.clusterEndpoint.hostname;
@@ -125,7 +128,7 @@ export class DatabaseConstruct extends Construct {
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for RDS PostgreSQL',
-      allowAllOutbound: false,
+      allowAllOutbound: true,  // Allow outbound for RDS to communicate with AWS services
     });
     this.securityGroups['postgres'] = securityGroup;
     
@@ -160,11 +163,14 @@ export class DatabaseConstruct extends Construct {
       storageType: rds.StorageType.GP3,
       storageEncrypted: true,
       backupRetention: cdk.Duration.days(props.backupRetentionDays || 1),
-      deleteAutomatedBackups: true,
-      deletionProtection: false,
+      deleteAutomatedBackups: props.environment !== 'production',
+      deletionProtection: props.environment === 'production',
       databaseName: 'librechat',
+      removalPolicy: props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
       credentials: rds.Credentials.fromGeneratedSecret('postgres', {
-        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret-${Date.now()}`,
+        secretName: `${cdk.Stack.of(this).stackName}-postgres-secret`,
       }),
       multiAz: false,
       publiclyAccessible: false,
@@ -182,7 +188,7 @@ export class DatabaseConstruct extends Construct {
     const securityGroup = new ec2.SecurityGroup(this, 'DocumentDbSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for DocumentDB',
-      allowAllOutbound: false,
+      allowAllOutbound: true,  // Allow outbound for DocumentDB to communicate with AWS services
     });
     this.securityGroups['documentdb'] = securityGroup;
     
@@ -195,7 +201,7 @@ export class DatabaseConstruct extends Construct {
       securityGroup: securityGroup,
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T3,
-        props.environment === 'production' ? ec2.InstanceSize.MEDIUM : ec2.InstanceSize.SMALL,
+        ec2.InstanceSize.MEDIUM,  // DocumentDB minimum supported T3 size
       ),
       instances: props.environment === 'production' ? 2 : 1,
       backup: {
@@ -207,7 +213,7 @@ export class DatabaseConstruct extends Construct {
       cloudWatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       masterUser: {
         username: 'docdbadmin',
-        secretName: `${cdk.Stack.of(this).stackName}-documentdb-secret-${Date.now()}`,
+        secretName: `${cdk.Stack.of(this).stackName}-documentdb-secret`,
       },
     });
     
@@ -234,6 +240,11 @@ export class DatabaseConstruct extends Construct {
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
+        securityGroups: [new ec2.SecurityGroup(this, 'InitPostgresLambdaSG', {
+          vpc: props.vpc,
+          description: 'Security group for PostgreSQL initialization Lambda',
+          allowAllOutbound: true,
+        })],
         environment: {
           POSTGRES_SECRET_ARN: this.secrets['postgres'].secretArn,
           ENABLE_PGVECTOR: String(props.enablePgVector !== false),
@@ -249,13 +260,12 @@ export class DatabaseConstruct extends Construct {
       
       // Grant permissions
       this.secrets['postgres'].grantRead(initPostgresFunction);
-      if (initPostgresFunction.connections.securityGroups.length > 0) {
-        this.securityGroups['postgres'].addIngressRule(
-          initPostgresFunction.connections.securityGroups[0]!,
-          ec2.Port.tcp(5432),
-          'Allow Lambda to initialize database'
-        );
-      }
+      // Always add the ingress rule using the Lambda's security group
+      this.securityGroups['postgres'].addIngressRule(
+        initPostgresFunction.connections.securityGroups[0],
+        ec2.Port.tcp(5432),
+        'Allow Lambda to initialize database'
+      );
       
       // Create custom resource to trigger initialization
       const provider = new cr.Provider(this, 'InitPostgresProvider', {
@@ -292,6 +302,11 @@ export class DatabaseConstruct extends Construct {
         vpcSubnets: {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
+        securityGroups: [new ec2.SecurityGroup(this, 'InitDocdbLambdaSG', {
+          vpc: props.vpc,
+          description: 'Security group for DocumentDB initialization Lambda',
+          allowAllOutbound: true,
+        })],
         environment: {
           DOCDB_SECRET_ARN: this.secrets['documentdb'].secretArn,
           DOCDB_ENDPOINT: this.endpoints['documentdb'],
@@ -310,13 +325,12 @@ export class DatabaseConstruct extends Construct {
       
       // Grant permissions
       this.secrets['documentdb'].grantRead(initDocdbFunction);
-      if (initDocdbFunction.connections.securityGroups.length > 0) {
-        this.securityGroups['documentdb'].addIngressRule(
-          initDocdbFunction.connections.securityGroups[0]!,
-          ec2.Port.tcp(27017),
-          'Allow Lambda to initialize database'
-        );
-      }
+      // Always add the ingress rule using the Lambda's security group
+      this.securityGroups['documentdb'].addIngressRule(
+        initDocdbFunction.connections.securityGroups[0],
+        ec2.Port.tcp(27017),
+        'Allow Lambda to initialize database'
+      );
       
       // Create custom resource to trigger initialization
       const provider = new cr.Provider(this, 'InitDocdbProvider', {

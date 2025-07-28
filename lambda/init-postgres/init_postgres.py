@@ -21,34 +21,85 @@ def get_db_credentials(secret_id):
         return secret
     except Exception as e:
         logger.error(f"Error retrieving secret: {str(e)}")
-        raise
+        # Add more context to the error
+        if 'AccessDeniedException' in str(e):
+            raise Exception(f"Access denied to secret {secret_id}. Check Lambda IAM role permissions.")
+        elif 'ResourceNotFoundException' in str(e):
+            raise Exception(f"Secret {secret_id} not found. Verify the secret exists.")
+        else:
+            raise Exception(f"Failed to retrieve secret {secret_id}: {str(e)}")
 
 
-def wait_for_db(host, port, user, password, max_retries=60, retry_delay=10):
+def wait_for_db(host, port, user, password, max_retries=90, retry_delay=10):
     """Wait for database to become available"""
     logger.info(f"Waiting for database at {host}:{port} with max retries: {max_retries}")
     logger.info(f"Using user: {user}")
     
+    # Use exponential backoff for retries
     for i in range(max_retries):
         try:
-            conn = psycopg2.connect(
-                host=host,
-                port=port,
-                user=user,
-                password=password,
-                database='postgres',  # Connect to default postgres database first
-                connect_timeout=5,
-                sslmode='require'  # RDS requires SSL connections
-            )
+            # Add more detailed connection parameters
+            conn_params = {
+                'host': host,
+                'port': port,
+                'user': user,
+                'password': password,
+                'database': 'postgres',  # Connect to default postgres database first
+                'connect_timeout': 10,   # Increased from 5 to 10
+                'sslmode': 'require',    # RDS requires SSL connections
+                'options': '-c statement_timeout=30000'  # 30 second statement timeout
+            }
+            
+            logger.info(f"Attempting connection with params: host={host}, port={port}, user={user}, sslmode=require")
+            conn = psycopg2.connect(**conn_params)
+            
+            # Test the connection is actually working
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+            
             conn.close()
-            logger.info("Database is available")
+            logger.info("Database is available and responding to queries")
             return True
+            
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            logger.warning(f"Database connection attempt {i+1}/{max_retries} failed: {error_msg}")
+            
+            # Check for specific error conditions
+            if "could not connect to server" in error_msg:
+                logger.info("Database server is not yet reachable, waiting...")
+            elif "password authentication failed" in error_msg:
+                logger.error("Authentication failed - check credentials")
+                raise  # Don't retry on auth failures
+            elif "SSL connection has been closed unexpectedly" in error_msg:
+                logger.info("SSL handshake failed, database may still be starting up")
+            
+            if i < max_retries - 1:
+                # Use exponential backoff with jitter
+                delay = min(retry_delay * (1.5 ** min(i, 10)), 60) + (time.time() % 5)
+                logger.info(f"Waiting {delay:.1f} seconds before retry...")
+                time.sleep(delay)
+                
         except Exception as e:
-            logger.info(f"Waiting for database... Attempt {i+1}/{max_retries}. Error: {str(e)}")
+            logger.error(f"Unexpected error during connection attempt {i+1}: {type(e).__name__}: {str(e)}")
             if i < max_retries - 1:
                 time.sleep(retry_delay)
+            else:
+                raise
     
-    raise Exception(f"Database did not become available in time after {max_retries * retry_delay} seconds")
+    raise Exception(f"Database did not become available after {max_retries} attempts over ~{max_retries * retry_delay / 60:.1f} minutes")
+
+
+def safe_close_connection(connection):
+    """Safely close database connection"""
+    if connection:
+        try:
+            if not connection.closed:
+                safe_close_connection(connection)
+                logger.info("Database connection closed")
+        except Exception as e:
+            logger.warning(f"Error closing connection: {str(e)}")
 
 
 def init_pgvector(connection):
@@ -120,12 +171,35 @@ def handler(event, context):
     """Lambda handler for PostgreSQL initialization"""
     logger.info(f"Received event: {json.dumps(event)}")
     
+    # Initialize response for CloudFormation
+    response_data = {}
+    physical_resource_id = event.get('PhysicalResourceId', 'postgres-init')
+    
+    # Handle CloudFormation custom resource lifecycle
+    request_type = event.get('RequestType')
+    if request_type in ['Delete', 'Update']:
+        logger.info(f"Handling {request_type} request - no action needed for database initialization")
+        # For Delete, we don't want to fail even if there are issues
+        try:
+            # Optionally verify database still exists (but don't fail if it doesn't)
+            if request_type == 'Delete':
+                logger.info("Delete request received - database resources will be cleaned up by CloudFormation")
+        except Exception as e:
+            logger.warning(f"Non-critical error during {request_type}: {str(e)}")
+        
+        return {
+            'PhysicalResourceId': physical_resource_id,
+            'Data': {'Message': f'{request_type} completed successfully'}
+        }
+    
     try:
         # Get database connection details from environment or event
-        db_host = event.get('DBHost', os.environ.get('DB_HOST'))
-        db_port = event.get('DBPort', os.environ.get('DB_PORT', '5432'))
-        db_name = event.get('DBName', os.environ.get('DB_NAME', 'librechat'))
-        secret_id = event.get('SecretId', os.environ.get('DB_SECRET_ID'))
+        # Priority: ResourceProperties (from CloudFormation) > Direct event properties > Environment variables
+        resource_props = event.get('ResourceProperties', {})
+        db_host = resource_props.get('DBHost', event.get('DBHost', os.environ.get('DB_HOST')))
+        db_port = resource_props.get('DBPort', event.get('DBPort', os.environ.get('DB_PORT', '5432')))
+        db_name = resource_props.get('DBName', event.get('DBName', os.environ.get('DB_NAME', 'librechat')))
+        secret_id = resource_props.get('SecretId', event.get('SecretId', os.environ.get('DB_SECRET_ID')))
         
         if not db_host:
             raise ValueError("Database host not provided")
@@ -152,16 +226,20 @@ def handler(event, context):
         # Wait for database to be available
         wait_for_db(db_host, db_port, db_user, db_password)
         
+        # Common connection parameters
+        conn_params = {
+            'host': db_host,
+            'port': db_port,
+            'user': db_user,
+            'password': db_password,
+            'connect_timeout': 10,
+            'sslmode': 'require',  # RDS requires SSL connections
+            'options': '-c statement_timeout=30000'
+        }
+        
         # First, try to connect to the target database
         try:
-            connection = psycopg2.connect(
-                host=db_host,
-                port=db_port,
-                database=db_name,
-                user=db_user,
-                password=db_password,
-                sslmode='require'  # RDS requires SSL connections
-            )
+            connection = psycopg2.connect(database=db_name, **conn_params)
             logger.info(f"Connected to database {db_name} on {db_host}:{db_port}")
         except psycopg2.OperationalError as e:
             if "does not exist" in str(e):
@@ -169,33 +247,27 @@ def handler(event, context):
                 logger.info(f"Database {db_name} does not exist, creating it...")
                 
                 # Connect to default postgres database
-                connection = psycopg2.connect(
-                    host=db_host,
-                    port=db_port,
-                    database='postgres',
-                    user=db_user,
-                    password=db_password,
-                    sslmode='require'  # RDS requires SSL connections
-                )
+                connection = psycopg2.connect(database='postgres', **conn_params)
                 connection.autocommit = True
                 
                 with connection.cursor() as cursor:
-                    # Create the database (can't use parameterized queries for CREATE DATABASE)
-                    cursor.execute(f'CREATE DATABASE "{db_name}"')
-                    logger.info(f"Database {db_name} created successfully")
+                    # Check if database exists (in case of race condition)
+                    cursor.execute(
+                        "SELECT 1 FROM pg_database WHERE datname = %s",
+                        (db_name,)
+                    )
+                    if cursor.fetchone():
+                        logger.info(f"Database {db_name} already exists (race condition)")
+                    else:
+                        # Create the database
+                        cursor.execute(f'CREATE DATABASE "{db_name}"')
+                        logger.info(f"Database {db_name} created successfully")
                 
-                connection.close()
+                safe_close_connection(connection)
                 
                 # Now connect to the new database
-                connection = psycopg2.connect(
-                    host=db_host,
-                    port=db_port,
-                    database=db_name,
-                    user=db_user,
-                    password=db_password,
-                    sslmode='require'  # RDS requires SSL connections
-                )
-                logger.info(f"Connected to newly created database {db_name}")
+                connection = psycopg2.connect(database=db_name, **conn_params)
+                logger.info(f"Connected to database {db_name}")
             else:
                 logger.error(f"Failed to connect to database: {str(e)}")
                 raise
@@ -204,7 +276,7 @@ def handler(event, context):
         init_pgvector(connection)
         
         # Close connection
-        connection.close()
+        safe_close_connection(connection)
         
         response = {
             'statusCode': 200,
@@ -236,6 +308,18 @@ def handler(event, context):
         import traceback
         logger.error(f"Full traceback: {traceback.format_exc()}")
         
+        # Clean up connection if it exists
+        if 'connection' in locals():
+            safe_close_connection(connection)
+        
+        # For Delete operations, don't fail
+        if request_type == 'Delete':
+            logger.warning(f"Error during Delete operation (non-fatal): {str(e)}")
+            return {
+                'PhysicalResourceId': physical_resource_id,
+                'Data': {'Message': 'Delete completed (with warnings)'}
+            }
+        
         response = {
             'statusCode': 500,
             'body': json.dumps({
@@ -245,7 +329,7 @@ def handler(event, context):
         }
         
         if event.get('RequestType'):
-            response['PhysicalResourceId'] = 'postgres-init-failed'
+            response['PhysicalResourceId'] = physical_resource_id
             response['Reason'] = f"{type(e).__name__}: {str(e)}"
         
         raise

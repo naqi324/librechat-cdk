@@ -2,10 +2,10 @@
 
 ## Quick Start
 
-The easiest way to get started is to run the setup script:
+The easiest way to get started is to run the deployment script:
 
 ```bash
-./setup.sh
+./deploy.sh
 ```
 
 This comprehensive script will:
