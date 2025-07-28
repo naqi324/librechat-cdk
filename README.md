@@ -6,21 +6,6 @@
 
 > Enterprise-grade deployment of LibreChat on AWS with support for both EC2 and ECS deployments, featuring AWS Bedrock integration, PostgreSQL with pgvector, DocumentDB, and comprehensive monitoring.
 
-## 📋 Table of Contents
-
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Prerequisites](#-prerequisites)
-- [Quick Start](#-quick-start)
-- [Deployment Options](#-deployment-options)
-- [Configuration](#-configuration)
-- [Cost Analysis](#-cost-analysis)
-- [Migration Guide](#-migration-guide)
-- [Troubleshooting](#-troubleshooting)
-- [Security](#-security)
-- [Contributing](#-contributing)
-- [Support](#-support)
-
 ## ✨ Features
 
 ### Core Features
@@ -134,7 +119,6 @@ The verbose deployment mode provides:
 - ⚖️ Configuring load balancers
 - 📦 Creating storage buckets
 - 📊 Setting up monitoring
-- And more detailed progress updates!
 
 ### Fast Deployment
 
@@ -328,51 +312,6 @@ For detailed configuration options, see the configuration files in this reposito
 - `config/librechat.yaml` - LibreChat application settings
 - `cdk.json` - CDK context and feature flags
 
-## 💰 Cost Analysis
-
-### Cost Optimization Tips
-
-1. **Use Savings Plans**: Save up to 30% on compute costs
-2. **Right-size Resources**: Monitor and adjust instance types
-3. **Enable Auto-scaling**: Scale down during off-hours
-4. **S3 Lifecycle Policies**: Move old data to cheaper storage
-5. **Reserved Instances**: For stable production workloads
-
-Run cost estimation:
-
-```bash
-npm run estimate-cost production
-```
-
-## 🔄 Migration Guide
-
-### From Original EC2 Deployment
-
-If you're using the original LibreChat CDK deployment:
-
-1. **Backup Current State**
-
-   ```bash
-   # Create backup manually
-   aws rds create-db-snapshot --db-instance-identifier librechat-postgres --db-snapshot-identifier backup-$(date +%Y%m%d)
-   ```
-
-2. **Update Code**
-
-   ```bash
-   git pull origin main
-   npm install
-   ```
-
-3. **Run Migration**
-
-   ```bash
-   # Run CDK deployment with the new version
-   npm run deploy
-   ```
-
-For detailed migration instructions, please refer to the AWS CDK migration documentation.
-
 ## 🔧 Troubleshooting
 
 ### Common Issues
@@ -420,59 +359,6 @@ See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for comprehensive guide.
 5. **Incident Response**: Have a plan and test it
 
 See [SECURITY.md](docs/SECURITY.md) for detailed security guide.
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow standard open source contribution practices.
-
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/your-org/librechat-cdk.git
-cd librechat-cdk
-
-# Install dependencies
-npm install
-
-# Run tests
-npm test
-
-# Run linter
-npm run lint
-
-# Local development
-docker-compose -f docker-compose.local.yml up
-```
-
-### Pull Request Process
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📞 Support
-
-### Useful Commands
-
-```bash
-# View all available commands
-npm run
-
-# Check deployment status
-aws cloudformation describe-stacks --stack-name LibreChatStack
-
-# View logs
-aws logs tail /aws/librechat --follow
-
-# SSH to EC2 instance (replace with your instance IP)
-ssh -i your-key.pem ubuntu@INSTANCE-IP
-
-# Get instance logs
-aws ec2 get-console-output --instance-id INSTANCE-ID
-```
 
 ## 🙏 Acknowledgments
 

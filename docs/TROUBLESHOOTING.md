@@ -239,6 +239,36 @@ If you still encounter this error:
 
 ## Runtime Issues
 
+### Issue: MONGO_URI Environment Variable Missing
+
+**Symptoms:**
+```
+throw new Error('Please define the MONGO_URI environment variable');
+```
+
+**Solution:**
+LibreChat requires MongoDB/DocumentDB to operate. This error occurs when:
+1. The deployment is configured with only PostgreSQL
+2. DocumentDB is not enabled in the database configuration
+
+**Fix:**
+The deployment configuration has been updated to use `postgres-and-documentdb` for all environments. If you encounter this error:
+
+1. **Update your deployment configuration:**
+   ```typescript
+   databaseConfig: {
+     engine: 'postgres-and-documentdb',  // Changed from 'postgres'
+     // ... other settings
+   }
+   ```
+
+2. **For existing deployments**, redeploy the stack:
+   ```bash
+   npm run deploy
+   ```
+
+3. **For EC2 deployments without DocumentDB**, a local MongoDB container is automatically included
+
 ### Issue: LibreChat Container Won't Start
 
 **Symptoms:**

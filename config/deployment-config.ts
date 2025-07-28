@@ -12,7 +12,7 @@ export const environmentConfigs = {
       natGateways: 0, // Cost savings for dev
     },
     databaseConfig: {
-      engine: 'postgres' as const,
+      engine: 'postgres-and-documentdb' as const,
       instanceClass: 'db.t3.small',
       allocatedStorage: 20,
       backupRetentionDays: 1,

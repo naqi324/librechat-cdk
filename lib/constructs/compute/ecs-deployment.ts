@@ -332,6 +332,14 @@ export class ECSDeployment extends Construct {
         ...(props.enableMeilisearch ? {
           MEILISEARCH_MASTER_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'meilisearch_master_key')
         } : {}),
+        ...(props.database.secrets['postgres'] ? {
+          POSTGRES_USER: ecs.Secret.fromSecretsManager(props.database.secrets['postgres'], 'username'),
+          POSTGRES_PASSWORD: ecs.Secret.fromSecretsManager(props.database.secrets['postgres'], 'password'),
+        } : {}),
+        ...(props.database.secrets['documentdb'] ? {
+          MONGO_USER: ecs.Secret.fromSecretsManager(props.database.secrets['documentdb'], 'username'),
+          MONGO_PASSWORD: ecs.Secret.fromSecretsManager(props.database.secrets['documentdb'], 'password'),
+        } : {}),
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:3080/health || exit 1'],

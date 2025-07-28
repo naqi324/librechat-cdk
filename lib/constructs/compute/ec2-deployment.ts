@@ -278,6 +278,9 @@ export class EC2Deployment extends Construct {
       // Get secrets
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres']?.secretArn || 'none'} --query SecretString --output text > /tmp/db-secrets.json`,
+      props.database.secrets['documentdb'] ? 
+        `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json` : 
+        'echo "{}" > /tmp/docdb-secrets.json',
       
       // Create environment file
       'cat > .env << EOL',
@@ -287,6 +290,9 @@ export class EC2Deployment extends Construct {
       '',
       '# Database',
       `DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password)@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem`,
+      props.database.endpoints['documentdb'] ? 
+        `MONGO_URI=mongodb://$(cat /tmp/docdb-secrets.json | jq -r .username):$(cat /tmp/docdb-secrets.json | jq -r .password)@${props.database.endpoints['documentdb']}:27017/?tls=true&tlsCAFile=/opt/librechat/rds-ca-2019-root.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false` :
+        'MONGO_URI=mongodb://mongodb:27017/LibreChat',
       '',
       '# AWS',
       `AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}`,
