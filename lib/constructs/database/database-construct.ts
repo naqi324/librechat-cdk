@@ -301,75 +301,22 @@ export class DatabaseConstruct extends Construct {
       }
     }
     
-    // Initialize DocumentDB
-    if (this.documentDbCluster && this.secrets['documentdb'] && this.securityGroups['documentdb'] && this.endpoints['documentdb']) {
-      const initDocdbFunction = new lambda.Function(this, 'InitDocFn', {
-        runtime: lambda.Runtime.PYTHON_3_11,
-        handler: 'init_docdb.handler',
-        code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-docdb')),
-        vpc: props.vpc,
-        vpcSubnets: {
-          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-        },
-        securityGroups: [new ec2.SecurityGroup(this, 'InitDocSG', {
-          vpc: props.vpc,
-          description: 'Security group for DocumentDB initialization Lambda',
-          allowAllOutbound: true,
-        })],
-        environment: {
-          DB_SECRET_ID: this.secrets['documentdb'].secretArn,
-          DB_HOST: this.endpoints['documentdb'],
-          DB_PORT: '27017',
-          DB_NAME: 'librechat',
-        },
-        timeout: cdk.Duration.minutes(5),
-        memorySize: 256,
-        logRetention: logs.RetentionDays.ONE_WEEK,
-        layers: [
-          new lambda.LayerVersion(this, 'PyMongoLayer', {
-            code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/pymongo/pymongo-layer.zip')),
-            compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
-            description: 'pymongo and dnspython for DocumentDB access',
-          }),
-          new lambda.LayerVersion(this, 'RdsCaLayer', {
-            code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/rds-ca/rds-ca-layer.zip')),
-            compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
-            description: 'RDS CA certificates for TLS connections',
-          }),
-        ],
+    // DocumentDB Initialization Note:
+    // DocumentDB initialization is handled by the application at runtime.
+    // This avoids deployment failures due to DocumentDB taking time to become available.
+    // The application will create collections and indexes on first connection.
+    //
+    // If you need to pre-initialize DocumentDB, you can:
+    // 1. Use a post-deployment script
+    // 2. Initialize from a bastion host
+    // 3. Let the application handle it (recommended)
+    
+    // Output DocumentDB connection information for reference
+    if (this.documentDbCluster) {
+      new cdk.CfnOutput(this, 'DocumentDBConnectionCommand', {
+        value: `mongo "mongodb://USERNAME:PASSWORD@${this.endpoints['documentdb']}:27017/?tls=true&tlsCAFile=rds-ca-2019-root.pem&replicaSet=rs0"`,
+        description: 'DocumentDB connection string (replace USERNAME and PASSWORD from secrets)',
       });
-      
-      // Grant permissions
-      this.secrets['documentdb'].grantRead(initDocdbFunction);
-      // Always add the ingress rule using the Lambda's security group
-      const docdbLambdaSecurityGroup = initDocdbFunction.connections.securityGroups[0];
-      if (docdbLambdaSecurityGroup) {
-        this.securityGroups['documentdb'].addIngressRule(
-          docdbLambdaSecurityGroup,
-          ec2.Port.tcp(27017),
-          'Allow Lambda to initialize database'
-        );
-      }
-      
-      // Create custom resource to trigger initialization
-      const provider = new cr.Provider(this, 'InitDocProvider', {
-        onEventHandler: initDocdbFunction,
-        logRetention: logs.RetentionDays.ONE_DAY,
-      });
-      
-      const initResource = new cdk.CustomResource(this, 'InitDocResource', {
-        serviceToken: provider.serviceToken,
-        properties: {
-          Version: '1.0', // Change this to trigger reinitialization
-          DBHost: this.endpoints['documentdb'],
-          DBPort: '27017',
-          DBName: 'librechat',
-          SecretId: this.secrets['documentdb'].secretArn,
-        },
-      });
-      
-      // Ensure the custom resource waits for the database to be created
-      initResource.node.addDependency(this.documentDbCluster);
     }
   }
 }
