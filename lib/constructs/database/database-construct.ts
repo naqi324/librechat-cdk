@@ -317,8 +317,10 @@ export class DatabaseConstruct extends Construct {
           allowAllOutbound: true,
         })],
         environment: {
-          DOCDB_SECRET_ARN: this.secrets['documentdb'].secretArn,
-          DOCDB_ENDPOINT: this.endpoints['documentdb'],
+          DB_SECRET_ID: this.secrets['documentdb'].secretArn,
+          DB_HOST: this.endpoints['documentdb'],
+          DB_PORT: '27017',
+          DB_NAME: 'librechat',
         },
         timeout: cdk.Duration.minutes(5),
         memorySize: 256,
@@ -328,6 +330,11 @@ export class DatabaseConstruct extends Construct {
             code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/pymongo/pymongo-layer.zip')),
             compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
             description: 'pymongo and dnspython for DocumentDB access',
+          }),
+          new lambda.LayerVersion(this, 'RdsCaLayer', {
+            code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/layers/rds-ca/rds-ca-layer.zip')),
+            compatibleRuntimes: [lambda.Runtime.PYTHON_3_11],
+            description: 'RDS CA certificates for TLS connections',
           }),
         ],
       });
@@ -350,12 +357,19 @@ export class DatabaseConstruct extends Construct {
         logRetention: logs.RetentionDays.ONE_DAY,
       });
       
-      new cdk.CustomResource(this, 'InitDocResource', {
+      const initResource = new cdk.CustomResource(this, 'InitDocResource', {
         serviceToken: provider.serviceToken,
         properties: {
           Version: '1.0', // Change this to trigger reinitialization
+          DBHost: this.endpoints['documentdb'],
+          DBPort: '27017',
+          DBName: 'librechat',
+          SecretId: this.secrets['documentdb'].secretArn,
         },
       });
+      
+      // Ensure the custom resource waits for the database to be created
+      initResource.node.addDependency(this.documentDbCluster);
     }
   }
 }
