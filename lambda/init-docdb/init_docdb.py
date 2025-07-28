@@ -31,8 +31,16 @@ def get_db_credentials(secret_id):
             raise Exception(f"Failed to retrieve secret {secret_id}: {str(e)}")
 
 
-def wait_for_db(host, port, username, password, max_retries=30, retry_delay=10):
+def wait_for_db(host, port, username, password, max_retries=None, retry_delay=None):
     """Wait for DocumentDB to become available"""
+    # Use environment variables if not provided
+    if max_retries is None:
+        max_retries = int(os.environ.get('MAX_RETRIES', '60'))
+    if retry_delay is None:
+        retry_delay = int(os.environ.get('RETRY_DELAY', '10'))
+    
+    logger.info(f"Waiting for DocumentDB with max_retries={max_retries}, retry_delay={retry_delay}s")
+    
     for i in range(max_retries):
         try:
             # DocumentDB requires TLS
@@ -54,7 +62,8 @@ def wait_for_db(host, port, username, password, max_retries=30, retry_delay=10):
             if i < max_retries - 1:
                 time.sleep(retry_delay)
     
-    raise Exception("DocumentDB did not become available in time")
+    total_wait_time = max_retries * retry_delay
+    raise Exception(f"DocumentDB did not become available after {total_wait_time} seconds ({max_retries} attempts). This is unusual - DocumentDB typically starts within 5-10 minutes.")
 
 
 def init_collections(db):
