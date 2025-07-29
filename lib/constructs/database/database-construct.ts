@@ -355,11 +355,10 @@ export class DatabaseConstruct extends Construct {
         );
       }
       
-      // Create custom resource provider with increased timeout
+      // Create custom resource provider
       const provider = new cr.Provider(this, 'InitDocProvider', {
         onEventHandler: initDocdbFunction,
         logRetention: logs.RetentionDays.ONE_DAY,
-        totalTimeout: cdk.Duration.minutes(15),  // Match Lambda timeout
       });
       
       const initResource = new cdk.CustomResource(this, 'InitDocResource', {
