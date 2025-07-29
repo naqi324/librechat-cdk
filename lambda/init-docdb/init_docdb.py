@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+import socket
 import boto3
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, OperationFailure
@@ -31,39 +32,83 @@ def get_db_credentials(secret_id):
             raise Exception(f"Failed to retrieve secret {secret_id}: {str(e)}")
 
 
+def test_network_connectivity(host, port):
+    """Test basic network connectivity to DocumentDB"""
+    try:
+        # Test DNS resolution
+        logger.info(f"Testing DNS resolution for {host}")
+        ip_address = socket.gethostbyname(host)
+        logger.info(f"DNS resolved {host} to {ip_address}")
+        
+        # Test TCP connectivity
+        logger.info(f"Testing TCP connectivity to {ip_address}:{port}")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((ip_address, int(port)))
+        sock.close()
+        
+        if result == 0:
+            logger.info(f"Successfully connected to {ip_address}:{port}")
+            return True
+        else:
+            logger.error(f"Failed to connect to {ip_address}:{port} - Error code: {result}")
+            return False
+    except socket.gaierror as e:
+        logger.error(f"DNS resolution failed for {host}: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"Network connectivity test failed: {str(e)}")
+        return False
+
+
 def wait_for_db(host, port, username, password, max_retries=None, retry_delay=None):
     """Wait for DocumentDB to become available"""
     # Use environment variables if not provided
     if max_retries is None:
-        max_retries = int(os.environ.get('MAX_RETRIES', '60'))
+        max_retries = int(os.environ.get('MAX_RETRIES', '30'))  # Reduced from 60
     if retry_delay is None:
         retry_delay = int(os.environ.get('RETRY_DELAY', '10'))
     
-    logger.info(f"Waiting for DocumentDB with max_retries={max_retries}, retry_delay={retry_delay}s")
+    logger.info(f"Starting DocumentDB connection process")
+    logger.info(f"Host: {host}, Port: {port}")
+    logger.info(f"Max retries: {max_retries}, Retry delay: {retry_delay}s")
+    
+    # First test network connectivity
+    if not test_network_connectivity(host, port):
+        raise Exception(f"Cannot establish network connectivity to DocumentDB at {host}:{port}")
     
     for i in range(max_retries):
         try:
+            # Build connection string without replica set first
+            conn_string = f"mongodb://{username}:{password}@{host}:{port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem"
+            logger.info(f"Attempting connection {i+1}/{max_retries}")
+            
             # DocumentDB requires TLS
             client = MongoClient(
-                f"mongodb://{username}:{password}@{host}:{port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem&replicaSet=rs0",
-                serverSelectionTimeoutMS=5000
+                conn_string,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=5000,
+                socketTimeoutMS=5000,
+                directConnection=True  # Add direct connection for single node
             )
+            
             # Test connection
             client.admin.command('ping')
             client.close()
-            logger.info("DocumentDB is available")
+            logger.info("Successfully connected to DocumentDB!")
             return True
-        except ServerSelectionTimeoutError:
-            logger.info(f"Waiting for DocumentDB... Attempt {i+1}/{max_retries}")
+            
+        except ServerSelectionTimeoutError as e:
+            logger.warning(f"Server selection timeout on attempt {i+1}/{max_retries}: {str(e)}")
             if i < max_retries - 1:
                 time.sleep(retry_delay)
         except Exception as e:
-            logger.error(f"Error connecting to DocumentDB: {str(e)}")
+            logger.error(f"Connection error on attempt {i+1}/{max_retries}: {type(e).__name__}: {str(e)}")
             if i < max_retries - 1:
                 time.sleep(retry_delay)
     
     total_wait_time = max_retries * retry_delay
-    raise Exception(f"DocumentDB did not become available after {total_wait_time} seconds ({max_retries} attempts). This is unusual - DocumentDB typically starts within 5-10 minutes.")
+    raise Exception(f"DocumentDB did not become available after {total_wait_time} seconds ({max_retries} attempts)")
 
 
 def init_collections(db):
@@ -205,8 +250,14 @@ def handler(event, context):
         
         # Connect to DocumentDB
         # Note: In Lambda, the CA file should be included in the deployment package
+        conn_string = f"mongodb://{db_user}:{db_password}@{db_host}:{db_port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem"
+        logger.info(f"Connecting to DocumentDB with host: {db_host}")
+        
         client = MongoClient(
-            f"mongodb://{db_user}:{db_password}@{db_host}:{db_port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem&replicaSet=rs0"
+            conn_string,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            directConnection=True
         )
         
         logger.info(f"Connected to DocumentDB at {db_host}:{db_port}")

@@ -244,7 +244,7 @@ export class DatabaseConstruct extends Construct {
         layers: [psycopg2Layer],
         vpc: props.vpc,
         vpcSubnets: {
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
         securityGroups: [new ec2.SecurityGroup(this, 'InitPostgresLambdaSG', {
           vpc: props.vpc,
@@ -309,7 +309,7 @@ export class DatabaseConstruct extends Construct {
         code: lambda.Code.fromAsset(path.join(__dirname, '../../../lambda/init-docdb')),
         vpc: props.vpc,
         vpcSubnets: {
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
         securityGroups: [new ec2.SecurityGroup(this, 'InitDocSG', {
           vpc: props.vpc,
