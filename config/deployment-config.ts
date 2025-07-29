@@ -1,4 +1,5 @@
 import { LibreChatStackProps } from '../lib/librechat-stack';
+
 import { getResourceSizeFromEnv, ResourceSize } from './resource-sizes';
 
 // Environment-specific configurations
@@ -28,7 +29,7 @@ export const environmentConfigs = {
     enableSharePoint: false,
     enableEnhancedMonitoring: false,
   },
-  
+
   staging: {
     deploymentMode: 'EC2' as const,
     vpcConfig: {
@@ -54,7 +55,7 @@ export const environmentConfigs = {
     enableSharePoint: false,
     enableEnhancedMonitoring: true,
   },
-  
+
   production: {
     deploymentMode: 'ECS' as const,
     vpcConfig: {
@@ -92,7 +93,7 @@ export const defaultConfig: Partial<LibreChatStackProps> = {
 // Configuration builder
 export class DeploymentConfigBuilder {
   private config: Partial<LibreChatStackProps>;
-  
+
   constructor(environment: keyof typeof environmentConfigs = 'development') {
     this.config = {
       ...defaultConfig,
@@ -100,19 +101,19 @@ export class DeploymentConfigBuilder {
       environment,
     };
   }
-  
+
   withDeploymentMode(mode: 'EC2' | 'ECS'): this {
     this.config.deploymentMode = mode;
     return this;
   }
-  
+
   withVpc(vpcConfig: LibreChatStackProps['vpcConfig']): this {
     if (vpcConfig) {
       this.config.vpcConfig = vpcConfig;
     }
     return this;
   }
-  
+
   withExistingVpc(vpcId: string): this {
     this.config.vpcConfig = {
       useExisting: true,
@@ -120,7 +121,7 @@ export class DeploymentConfigBuilder {
     };
     return this;
   }
-  
+
   withDomain(domainName: string, certificateArn?: string, hostedZoneId?: string): this {
     const domainConfig: NonNullable<LibreChatStackProps['domainConfig']> = { domainName };
     if (certificateArn !== undefined) {
@@ -132,41 +133,37 @@ export class DeploymentConfigBuilder {
     this.config.domainConfig = domainConfig;
     return this;
   }
-  
+
   withDatabase(databaseConfig: LibreChatStackProps['databaseConfig']): this {
     if (databaseConfig) {
       this.config.databaseConfig = databaseConfig;
     }
     return this;
   }
-  
+
   withCompute(computeConfig: LibreChatStackProps['computeConfig']): this {
     if (computeConfig) {
       this.config.computeConfig = computeConfig;
     }
     return this;
   }
-  
+
   withKeyPair(keyPairName: string): this {
     this.config.keyPairName = keyPairName;
     return this;
   }
-  
+
   withAllowedIps(ips: string[]): this {
     this.config.allowedIps = ips;
     return this;
   }
-  
+
   withAlertEmail(email: string): this {
     this.config.alertEmail = email;
     return this;
   }
-  
-  withFeatures(features: {
-    rag?: boolean;
-    meilisearch?: boolean;
-    sharePoint?: boolean;
-  }): this {
+
+  withFeatures(features: { rag?: boolean; meilisearch?: boolean; sharePoint?: boolean }): this {
     if (features.rag !== undefined) {
       this.config.enableRag = features.rag;
     }
@@ -178,15 +175,15 @@ export class DeploymentConfigBuilder {
     }
     return this;
   }
-  
+
   withEnhancedMonitoring(enabled: boolean): this {
     this.config.enableEnhancedMonitoring = enabled;
     return this;
   }
-  
+
   withResourceSize(size: string | ResourceSize): this {
     const resourceSize = typeof size === 'string' ? getResourceSizeFromEnv() : size;
-    
+
     // Apply resource sizes based on deployment mode
     if (this.config.deploymentMode === 'EC2' && this.config.computeConfig) {
       this.config.computeConfig.instanceType = resourceSize.ec2.instanceType;
@@ -195,26 +192,26 @@ export class DeploymentConfigBuilder {
       this.config.computeConfig.memory = resourceSize.ecs.memory;
       this.config.computeConfig.desiredCount = resourceSize.ecs.desiredCount;
     }
-    
+
     // Apply database sizes
     if (this.config.databaseConfig) {
       this.config.databaseConfig.instanceClass = resourceSize.rds.instanceClass;
       this.config.databaseConfig.allocatedStorage = resourceSize.rds.allocatedStorage;
     }
-    
+
     return this;
   }
-  
+
   build(): LibreChatStackProps {
     // Validate required fields
     if (!this.config.environment) {
       throw new Error('Environment is required');
     }
-    
+
     if (!this.config.deploymentMode) {
       throw new Error('Deployment mode is required');
     }
-    
+
     if (this.config.deploymentMode === 'EC2' && !this.config.keyPairName) {
       throw new Error(`
 Key pair name is required for EC2 deployment.
@@ -246,7 +243,7 @@ To fix this error, you can:
 For examples, see config/development.env.example or config/ecs-deployment.env.example
 `);
     }
-    
+
     return this.config as LibreChatStackProps;
   }
 }
@@ -257,16 +254,18 @@ export const presetConfigs = {
   minimalDev: new DeploymentConfigBuilder('development')
     .withFeatures({ rag: false, meilisearch: false })
     .withCompute({ instanceType: 't3.medium' }),
-  
+
   // Standard development setup
-  standardDev: new DeploymentConfigBuilder('development')
-    .withFeatures({ rag: true, meilisearch: false }),
-  
+  standardDev: new DeploymentConfigBuilder('development').withFeatures({
+    rag: true,
+    meilisearch: false,
+  }),
+
   // Full-featured development
   fullDev: new DeploymentConfigBuilder('development')
     .withFeatures({ rag: true, meilisearch: true })
     .withCompute({ instanceType: 't3.xlarge' }),
-  
+
   // Production EC2 (cost-optimized)
   productionEC2: new DeploymentConfigBuilder('production')
     .withDeploymentMode('EC2')
@@ -277,16 +276,14 @@ export const presetConfigs = {
       allocatedStorage: 100,
       backupRetentionDays: 7,
     }),
-  
+
   // Production ECS (scalable)
-  productionECS: new DeploymentConfigBuilder('production')
-    .withDeploymentMode('ECS')
-    .withCompute({
-      desiredCount: 3,
-      cpu: 4096,
-      memory: 8192,
-    }),
-  
+  productionECS: new DeploymentConfigBuilder('production').withDeploymentMode('ECS').withCompute({
+    desiredCount: 3,
+    cpu: 4096,
+    memory: 8192,
+  }),
+
   // Enterprise production
   enterprise: new DeploymentConfigBuilder('production')
     .withDeploymentMode('ECS')
@@ -313,33 +310,33 @@ export const presetConfigs = {
 export function getConfigFromEnvironment(): LibreChatStackProps {
   const env = process.env.DEPLOYMENT_ENV || 'development';
   const mode = process.env.DEPLOYMENT_MODE as 'EC2' | 'ECS' | undefined;
-  
+
   const builder = new DeploymentConfigBuilder(env as keyof typeof environmentConfigs);
-  
+
   // Override deployment mode if specified in environment
   if (mode) {
     builder.withDeploymentMode(mode);
   }
-  
+
   // Apply resource size if specified
   if (process.env.RESOURCE_SIZE || process.env.FAST_DEPLOY) {
     builder.withResourceSize(process.env.RESOURCE_SIZE || 'medium');
   }
-  
+
   // Apply environment variables
   if (process.env.KEY_PAIR_NAME) {
     builder.withKeyPair(process.env.KEY_PAIR_NAME);
   }
-  
+
   if (process.env.ALERT_EMAIL) {
     builder.withAlertEmail(process.env.ALERT_EMAIL);
   }
-  
+
   const allowedIps = process.env.ALLOWED_IPS;
   if (allowedIps) {
     builder.withAllowedIps(allowedIps.split(','));
   }
-  
+
   if (process.env.DOMAIN_NAME) {
     builder.withDomain(
       process.env.DOMAIN_NAME,
@@ -347,10 +344,10 @@ export function getConfigFromEnvironment(): LibreChatStackProps {
       process.env.HOSTED_ZONE_ID
     );
   }
-  
+
   if (process.env.EXISTING_VPC_ID) {
     builder.withExistingVpc(process.env.EXISTING_VPC_ID);
   }
-  
+
   return builder.build();
 }

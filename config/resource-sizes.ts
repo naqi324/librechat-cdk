@@ -33,7 +33,7 @@ type ResourceSizeKey = 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'fast-deploy
 
 export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
   // Minimal - for testing and development
-  'xs': {
+  xs: {
     name: 'Extra Small',
     description: 'Minimal resources for testing (1-5 users)',
     ec2: {
@@ -54,9 +54,9 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
     },
     estimatedMonthlyCost: 50,
   },
-  
+
   // Small - for small teams
-  'small': {
+  small: {
     name: 'Small',
     description: 'Light workloads (5-20 users)',
     ec2: {
@@ -71,20 +71,20 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
       maxCount: 3,
     },
     rds: {
-      instanceClass: 'db.t3.small',  // For RDS PostgreSQL
+      instanceClass: 'db.t3.small', // For RDS PostgreSQL
       allocatedStorage: 50,
       maxAllocatedStorage: 100,
       multiAz: false,
     },
     documentdb: {
-      instanceClass: 'db.t3.medium',  // Minimum supported for DocumentDB
+      instanceClass: 'db.t3.medium', // Minimum supported for DocumentDB
       instanceCount: 1,
     },
     estimatedMonthlyCost: 120,
   },
-  
+
   // Medium - default for most deployments
-  'medium': {
+  medium: {
     name: 'Medium',
     description: 'Standard workloads (20-100 users)',
     ec2: {
@@ -110,9 +110,9 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
     },
     estimatedMonthlyCost: 300,
   },
-  
+
   // Large - for bigger teams
-  'large': {
+  large: {
     name: 'Large',
     description: 'Heavy workloads (100-500 users)',
     ec2: {
@@ -138,9 +138,9 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
     },
     estimatedMonthlyCost: 800,
   },
-  
+
   // Extra Large - for enterprise
-  'xl': {
+  xl: {
     name: 'Extra Large',
     description: 'Enterprise workloads (500+ users)',
     ec2: {
@@ -166,7 +166,7 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
     },
     estimatedMonthlyCost: 2000,
   },
-  
+
   // Custom preset for fastest deployment
   'fast-deploy': {
     name: 'Fast Deploy',
@@ -199,7 +199,7 @@ export function getResourceSize(size: string): ResourceSize {
   if (size in RESOURCE_SIZES) {
     return RESOURCE_SIZES[size as ResourceSizeKey];
   }
-  
+
   // Fallback to medium
   return RESOURCE_SIZES['medium'];
 }
@@ -210,10 +210,10 @@ export function getResourceSize(size: string): ResourceSize {
 export function getResourceSizeFromEnv(): ResourceSize {
   const size = process.env.RESOURCE_SIZE || 'medium';
   const fastDeploy = process.env.FAST_DEPLOY === 'true';
-  
+
   if (fastDeploy) {
     return RESOURCE_SIZES['fast-deploy'];
   }
-  
+
   return getResourceSize(size);
 }

@@ -19,7 +19,7 @@ export interface LibreChatStackProps extends cdk.StackProps {
   // Deployment Configuration
   deploymentMode: 'EC2' | 'ECS';
   environment: 'development' | 'staging' | 'production';
-  
+
   // Network Configuration
   vpcConfig?: {
     useExisting?: boolean;
@@ -28,14 +28,14 @@ export interface LibreChatStackProps extends cdk.StackProps {
     maxAzs?: number;
     natGateways?: number;
   };
-  
+
   // Domain Configuration (optional)
   domainConfig?: {
     domainName: string;
     certificateArn?: string;
     hostedZoneId?: string;
   };
-  
+
   // Database Configuration
   databaseConfig?: {
     engine: 'postgres' | 'postgres-and-documentdb';
@@ -43,7 +43,7 @@ export interface LibreChatStackProps extends cdk.StackProps {
     allocatedStorage?: number;
     backupRetentionDays?: number;
   };
-  
+
   // Compute Configuration
   computeConfig?: {
     instanceType?: string; // For EC2
@@ -51,16 +51,16 @@ export interface LibreChatStackProps extends cdk.StackProps {
     cpu?: number; // For ECS
     memory?: number; // For ECS
   };
-  
+
   // Monitoring Configuration
   alertEmail?: string;
   enableEnhancedMonitoring?: boolean;
-  
+
   // Feature Flags
   enableRag?: boolean;
   enableMeilisearch?: boolean;
   enableSharePoint?: boolean;
-  
+
   // Security
   allowedIps?: string[];
   keyPairName?: string;
@@ -70,13 +70,13 @@ export class LibreChatStack extends cdk.Stack {
   public readonly vpc: ec2.IVpc;
   public readonly loadBalancerUrl: string;
   public readonly databaseEndpoints: { [key: string]: string };
-  
+
   constructor(scope: Construct, id: string, props: LibreChatStackProps) {
     super(scope, id, props);
-    
+
     // Validate required properties
     this.validateProps(props);
-    
+
     // Create or import VPC
     const vpcConstructProps: any = {
       useExisting: props.vpcConfig?.useExisting || false,
@@ -85,39 +85,41 @@ export class LibreChatStack extends cdk.Stack {
       natGateways: props.vpcConfig?.natGateways || (props.environment === 'production' ? 2 : 1),
       environment: props.environment,
     };
-    
+
     if (props.vpcConfig?.existingVpcId) {
       vpcConstructProps.existingVpcId = props.vpcConfig.existingVpcId;
     }
-    
+
     const vpcConstruct = new VpcConstruct(this, 'Network', vpcConstructProps);
     this.vpc = vpcConstruct.vpc;
-    
+
     // Create storage resources
     const storage = new StorageConstruct(this, 'Storage', {
       environment: props.environment,
       enableEfs: props.deploymentMode === 'ECS',
       vpc: this.vpc,
     });
-    
+
     // Create database resources
     const database = new DatabaseConstruct(this, 'Database', {
       vpc: this.vpc,
       engine: props.databaseConfig?.engine || 'postgres',
-      instanceClass: props.databaseConfig?.instanceClass || this.getDefaultInstanceClass(props.environment),
+      instanceClass:
+        props.databaseConfig?.instanceClass || this.getDefaultInstanceClass(props.environment),
       allocatedStorage: props.databaseConfig?.allocatedStorage || 100,
-      backupRetentionDays: props.databaseConfig?.backupRetentionDays || (props.environment === 'production' ? 7 : 1),
+      backupRetentionDays:
+        props.databaseConfig?.backupRetentionDays || (props.environment === 'production' ? 7 : 1),
       enablePgVector: true,
       environment: props.environment,
     });
     this.databaseEndpoints = database.endpoints;
-    
+
     // Create secrets for application
     const appSecrets = this.createApplicationSecrets(props);
-    
+
     // Deploy based on selected mode
     let deployment: EC2Deployment | ECSDeployment;
-    
+
     if (props.deploymentMode === 'EC2') {
       const ec2Props: any = {
         vpc: this.vpc,
@@ -131,11 +133,11 @@ export class LibreChatStack extends cdk.Stack {
         enableRag: props.enableRag || false,
         enableMeilisearch: props.enableMeilisearch || false,
       };
-      
+
       if (props.domainConfig) {
         ec2Props.domainConfig = props.domainConfig;
       }
-      
+
       deployment = new EC2Deployment(this, 'EC2Deployment', ec2Props);
     } else {
       // Create ECS cluster
@@ -143,13 +145,13 @@ export class LibreChatStack extends cdk.Stack {
         vpc: this.vpc,
         containerInsights: props.environment === 'production',
       });
-      
+
       // Add service discovery namespace
       cluster.addDefaultCloudMapNamespace({
         name: 'librechat.local',
         vpc: this.vpc,
       });
-      
+
       const ecsProps: any = {
         vpc: this.vpc,
         cluster: cluster,
@@ -163,16 +165,16 @@ export class LibreChatStack extends cdk.Stack {
         enableRag: props.enableRag || false,
         enableMeilisearch: props.enableMeilisearch || false,
       };
-      
+
       if (props.domainConfig) {
         ecsProps.domainConfig = props.domainConfig;
       }
-      
+
       deployment = new ECSDeployment(this, 'ECSDeployment', ecsProps);
     }
-    
+
     this.loadBalancerUrl = deployment.loadBalancerUrl;
-    
+
     // Create monitoring resources
     if (props.alertEmail || props.enableEnhancedMonitoring) {
       const monitoringProps: any = {
@@ -181,39 +183,39 @@ export class LibreChatStack extends cdk.Stack {
         environment: props.environment,
         enableEnhancedMonitoring: props.enableEnhancedMonitoring || false,
       };
-      
+
       if (props.alertEmail) {
         monitoringProps.alertEmail = props.alertEmail;
       }
-      
+
       new MonitoringConstruct(this, 'Monitoring', monitoringProps);
     }
-    
+
     // Create outputs
     this.createOutputs(deployment, database);
-    
+
     // Apply tags
     this.applyTags(props);
   }
-  
+
   private validateProps(props: LibreChatStackProps): void {
     if (!props.deploymentMode) {
       throw new Error('deploymentMode is required');
     }
-    
+
     if (!props.environment) {
       throw new Error('environment is required');
     }
-    
+
     if (props.deploymentMode === 'EC2' && !props.keyPairName) {
       throw new Error('keyPairName is required for EC2 deployment');
     }
-    
+
     if (props.domainConfig && !props.domainConfig.domainName) {
       throw new Error('domainName is required when domainConfig is provided');
     }
   }
-  
+
   private getDefaultInstanceClass(environment: string): string {
     switch (environment) {
       case 'production':
@@ -224,7 +226,7 @@ export class LibreChatStack extends cdk.Stack {
         return 'db.t3.small';
     }
   }
-  
+
   private createApplicationSecrets(props: LibreChatStackProps): secretsmanager.ISecret {
     // Create a secret with all required keys
     const uniqueSuffix = `${props.environment}-${Date.now().toString(36).slice(-4)}`;
@@ -356,27 +358,30 @@ def handler(event, context):
 
     // Ensure the custom resource runs after the secret is created
     populateResource.node.addDependency(secret);
-    
+
     // Note: Secret rotation would be added here for production environments
     // secret.addRotationSchedule('AppSecretRotation', {
     //   automaticallyAfter: cdk.Duration.days(90),
     // });
-    
+
     return secret;
   }
-  
-  private createOutputs(deployment: EC2Deployment | ECSDeployment, _database: DatabaseConstruct): void {
+
+  private createOutputs(
+    deployment: EC2Deployment | ECSDeployment,
+    _database: DatabaseConstruct
+  ): void {
     new cdk.CfnOutput(this, 'LoadBalancerURL', {
       value: this.loadBalancerUrl,
       description: 'URL to access LibreChat',
       exportName: `${cdk.Stack.of(this).stackName}-LoadBalancerURL`,
     });
-    
+
     new cdk.CfnOutput(this, 'DeploymentMode', {
       value: deployment instanceof EC2Deployment ? 'EC2' : 'ECS',
       description: 'Deployment mode used',
     });
-    
+
     Object.entries(this.databaseEndpoints).forEach(([name, endpoint]) => {
       new cdk.CfnOutput(this, `${name}Endpoint`, {
         value: endpoint,
@@ -384,14 +389,14 @@ def handler(event, context):
         exportName: `${cdk.Stack.of(this).stackName}-${name}Endpoint`,
       });
     });
-    
+
     new cdk.CfnOutput(this, 'VPCId', {
       value: this.vpc.vpcId,
       description: 'VPC ID',
       exportName: `${cdk.Stack.of(this).stackName}-VPCId`,
     });
   }
-  
+
   private applyTags(props: LibreChatStackProps): void {
     cdk.Tags.of(this).add('Application', 'LibreChat');
     cdk.Tags.of(this).add('Environment', props.environment);

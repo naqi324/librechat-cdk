@@ -3,6 +3,7 @@ import { PricingClient } from '@aws-sdk/client-pricing';
 import { EC2Client } from '@aws-sdk/client-ec2';
 import Table from 'cli-table3';
 import chalk from 'chalk';
+
 import { environmentConfigs } from '../config/deployment-config';
 
 interface CostEstimate {
@@ -25,28 +26,30 @@ class CostEstimator {
     new EC2Client({ region });
   }
 
-  async estimateForEnvironment(environment: keyof typeof environmentConfigs): Promise<CostEstimate[]> {
+  async estimateForEnvironment(
+    environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const config = environmentConfigs[environment];
     const estimates: CostEstimate[] = [];
 
     // EC2/ECS Compute costs
     if (config.deploymentMode === 'EC2') {
-      estimates.push(...await this.estimateEC2Costs(config));
+      estimates.push(...(await this.estimateEC2Costs(config)));
     } else {
-      estimates.push(...await this.estimateECSCosts(config));
+      estimates.push(...(await this.estimateECSCosts(config)));
     }
 
     // Database costs
-    estimates.push(...await this.estimateDatabaseCosts(config));
+    estimates.push(...(await this.estimateDatabaseCosts(config)));
 
     // Storage costs
-    estimates.push(...await this.estimateStorageCosts(config));
+    estimates.push(...(await this.estimateStorageCosts(config)));
 
     // Network costs
-    estimates.push(...await this.estimateNetworkCosts(config));
+    estimates.push(...(await this.estimateNetworkCosts(config)));
 
     // Additional services
-    estimates.push(...await this.estimateAdditionalServicesCosts(config));
+    estimates.push(...(await this.estimateAdditionalServicesCosts(config)));
 
     return estimates;
   }
@@ -58,7 +61,7 @@ class CostEstimator {
     try {
       // Get instance pricing
       const price = await this.getEC2Price(instanceType);
-      
+
       estimates.push({
         service: 'EC2',
         resource: `Instance (${instanceType})`,
@@ -90,7 +93,6 @@ class CostEstimator {
         monthlyHours: 1,
         monthlyCost: 3000 * 0.005,
       });
-
     } catch (error) {
       console.error('Error estimating EC2 costs:', error);
     }
@@ -141,7 +143,7 @@ class CostEstimator {
     // PostgreSQL/Aurora
     if (engine.includes('postgres')) {
       const instanceClass = config.databaseConfig?.instanceClass || 'db.t3.medium';
-      
+
       if (config.environment === 'production') {
         // Aurora Serverless v2
         estimates.push({
@@ -161,9 +163,9 @@ class CostEstimator {
           resource: 'Storage',
           quantity: 100,
           unit: 'GB-month',
-          pricePerUnit: 0.10,
+          pricePerUnit: 0.1,
           monthlyHours: 1,
-          monthlyCost: 100 * 0.10,
+          monthlyCost: 100 * 0.1,
         });
       } else {
         // Regular RDS
@@ -208,9 +210,9 @@ class CostEstimator {
         resource: 'Storage',
         quantity: 50,
         unit: 'GB-month',
-        pricePerUnit: 0.10,
+        pricePerUnit: 0.1,
         monthlyHours: 1,
-        monthlyCost: 50 * 0.10,
+        monthlyCost: 50 * 0.1,
       });
     }
 
@@ -259,9 +261,9 @@ class CostEstimator {
         resource: 'Standard Storage',
         quantity: 20,
         unit: 'GB-month',
-        pricePerUnit: 0.30,
+        pricePerUnit: 0.3,
         monthlyHours: 1,
-        monthlyCost: 20 * 0.30,
+        monthlyCost: 20 * 0.3,
       });
     }
 
@@ -342,9 +344,9 @@ class CostEstimator {
       resource: 'Logs Ingestion',
       quantity: 10,
       unit: 'GB',
-      pricePerUnit: 0.50,
+      pricePerUnit: 0.5,
       monthlyHours: 1,
-      monthlyCost: 10 * 0.50,
+      monthlyCost: 10 * 0.5,
     });
 
     estimates.push({
@@ -362,9 +364,9 @@ class CostEstimator {
       resource: 'Metrics',
       quantity: 50,
       unit: 'metric-month',
-      pricePerUnit: 0.30,
+      pricePerUnit: 0.3,
       monthlyHours: 1,
-      monthlyCost: 50 * 0.30,
+      monthlyCost: 50 * 0.3,
       notes: 'First 10 metrics free',
     });
 
@@ -374,9 +376,9 @@ class CostEstimator {
       resource: 'Secrets',
       quantity: 5,
       unit: 'secret-month',
-      pricePerUnit: 0.40,
+      pricePerUnit: 0.4,
       monthlyHours: 1,
-      monthlyCost: 5 * 0.40,
+      monthlyCost: 5 * 0.4,
     });
 
     // SNS (for alerts)
@@ -399,7 +401,7 @@ class CostEstimator {
       resource: 'Invocations',
       quantity: 10,
       unit: 'million requests',
-      pricePerUnit: 0.20,
+      pricePerUnit: 0.2,
       monthlyHours: 1,
       monthlyCost: 0.001,
       notes: 'First 1M requests free',
@@ -458,9 +460,10 @@ class CostEstimator {
     let totalMonthlyCost = 0;
     const serviceTotals: { [key: string]: number } = {};
 
-    estimates.forEach(estimate => {
+    estimates.forEach((estimate) => {
       totalMonthlyCost += estimate.monthlyCost;
-      serviceTotals[estimate.service] = (serviceTotals[estimate.service] || 0) + estimate.monthlyCost;
+      serviceTotals[estimate.service] =
+        (serviceTotals[estimate.service] || 0) + estimate.monthlyCost;
 
       table.push([
         estimate.service,
@@ -473,23 +476,31 @@ class CostEstimator {
     });
 
     console.log('\n' + chalk.bold.blue('AWS Cost Estimation Report'));
-    console.log('=' .repeat(80));
+    console.log('='.repeat(80));
     console.log(table.toString());
-    console.log('=' .repeat(80));
+    console.log('='.repeat(80));
 
     // Service summary
     console.log('\n' + chalk.bold('Cost Summary by Service:'));
     Object.entries(serviceTotals)
       .sort((a, b) => b[1] - a[1])
       .forEach(([service, cost]) => {
-        const percentage = (cost / totalMonthlyCost * 100).toFixed(1);
-        console.log(`  ${service.padEnd(20)} ${chalk.green(`$${cost.toFixed(2)}`).padEnd(15)} (${percentage}%)`);
+        const percentage = ((cost / totalMonthlyCost) * 100).toFixed(1);
+        console.log(
+          `  ${service.padEnd(20)} ${chalk.green(`$${cost.toFixed(2)}`).padEnd(15)} (${percentage}%)`
+        );
       });
 
-    console.log('\n' + '=' .repeat(80));
-    console.log(chalk.bold(`Total Estimated Monthly Cost: ${chalk.green(`$${totalMonthlyCost.toFixed(2)}`)}`));
-    console.log(chalk.bold(`Total Estimated Annual Cost: ${chalk.green(`$${(totalMonthlyCost * 12).toFixed(2)}`)}`));
-    console.log('=' .repeat(80));
+    console.log('\n' + '='.repeat(80));
+    console.log(
+      chalk.bold(`Total Estimated Monthly Cost: ${chalk.green(`$${totalMonthlyCost.toFixed(2)}`)}`)
+    );
+    console.log(
+      chalk.bold(
+        `Total Estimated Annual Cost: ${chalk.green(`$${(totalMonthlyCost * 12).toFixed(2)}`)}`
+      )
+    );
+    console.log('='.repeat(80));
 
     // Disclaimers
     console.log('\n' + chalk.yellow('⚠️  Important Notes:'));
@@ -502,9 +513,13 @@ class CostEstimator {
 
   public async generateComparisonReport(): Promise<void> {
     console.log('\n' + chalk.bold.blue('Cost Comparison Across Environments'));
-    console.log('=' .repeat(80));
+    console.log('='.repeat(80));
 
-    const environments: Array<keyof typeof environmentConfigs> = ['development', 'staging', 'production'];
+    const environments: Array<keyof typeof environmentConfigs> = [
+      'development',
+      'staging',
+      'production',
+    ];
     const allEstimates: { [key: string]: CostEstimate[] } = {};
     const totals: { [key: string]: number } = {};
 
@@ -527,26 +542,28 @@ class CostEstimator {
 
     // Get all unique services
     const allServices = new Set<string>();
-    Object.values(allEstimates).forEach(estimates => {
-      estimates.forEach(est => allServices.add(est.service));
+    Object.values(allEstimates).forEach((estimates) => {
+      estimates.forEach((est) => allServices.add(est.service));
     });
 
     // Add service costs to table
-    Array.from(allServices).sort().forEach(service => {
-      const row = [service];
-      environments.forEach(env => {
-        const estimates = allEstimates[env];
-        if (estimates) {
-          const serviceCost = estimates
-            .filter(est => est.service === service)
-            .reduce((sum, est) => sum + est.monthlyCost, 0);
-          row.push(serviceCost > 0 ? chalk.green(`$${serviceCost.toFixed(2)}`) : '-');
-        } else {
-          row.push('-');
-        }
+    Array.from(allServices)
+      .sort()
+      .forEach((service) => {
+        const row = [service];
+        environments.forEach((env) => {
+          const estimates = allEstimates[env];
+          if (estimates) {
+            const serviceCost = estimates
+              .filter((est) => est.service === service)
+              .reduce((sum, est) => sum + est.monthlyCost, 0);
+            row.push(serviceCost > 0 ? chalk.green(`$${serviceCost.toFixed(2)}`) : '-');
+          } else {
+            row.push('-');
+          }
+        });
+        table.push(row);
       });
-      table.push(row);
-    });
 
     // Add totals row
     table.push([
@@ -560,7 +577,7 @@ class CostEstimator {
 
     // Annual comparison
     console.log('\n' + chalk.bold('Annual Cost Comparison:'));
-    environments.forEach(env => {
+    environments.forEach((env) => {
       const monthlyTotal = totals[env] || 0;
       const annual = monthlyTotal * 12;
       console.log(`  ${env.padEnd(15)} ${chalk.green(`$${annual.toFixed(2)}`)}`);
@@ -576,8 +593,8 @@ async function main() {
   if (args.includes('--compare')) {
     await estimator.generateComparisonReport();
   } else {
-    const environment = args[0] as keyof typeof environmentConfigs || 'development';
-    
+    const environment = (args[0] as keyof typeof environmentConfigs) || 'development';
+
     if (!environmentConfigs[environment]) {
       console.error(chalk.red(`Invalid environment: ${environment}`));
       console.log('Available environments:', Object.keys(environmentConfigs).join(', '));

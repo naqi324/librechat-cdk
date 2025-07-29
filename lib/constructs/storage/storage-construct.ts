@@ -17,26 +17,26 @@ export class StorageConstruct extends Construct {
   public fileSystem?: efs.FileSystem;
   public readonly accessPoints: { [key: string]: efs.AccessPoint } = {};
   private efsSecurityGroup?: ec2.SecurityGroup;
-  
+
   constructor(scope: Construct, id: string, props: StorageConstructProps) {
     super(scope, id);
-    
+
     // Create S3 bucket for documents and uploads
     this.s3Bucket = this.createS3Bucket(props);
-    
+
     // Create EFS for container shared storage (if enabled)
     if (props.enableEfs && props.vpc) {
       this.createEfsStorage(props);
     }
   }
-  
+
   private createS3Bucket(props: StorageConstructProps): s3.Bucket {
     // Generate a unique bucket name using stack name and account/region
     const stackName = cdk.Stack.of(this).stackName.toLowerCase();
     const account = cdk.Stack.of(this).account;
     const region = cdk.Stack.of(this).region;
     const uniqueSuffix = Date.now().toString(36).slice(-4);
-    
+
     const bucket = new s3.Bucket(this, 'DocumentBucket', {
       bucketName: `${stackName}-docs-${account}-${region}-${uniqueSuffix}`,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -77,54 +77,55 @@ export class StorageConstruct extends Construct {
           maxAge: 3000,
         },
       ],
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: props.environment !== 'production',
     });
-    
+
     // Add bucket policy for secure access
-    bucket.addToResourcePolicy(new iam.PolicyStatement({
-      effect: iam.Effect.DENY,
-      principals: [new iam.AnyPrincipal()],
-      actions: ['s3:*'],
-      resources: [
-        bucket.bucketArn,
-        `${bucket.bucketArn}/*`,
-      ],
-      conditions: {
-        Bool: {
-          'aws:SecureTransport': 'false',
+    bucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ['s3:*'],
+        resources: [bucket.bucketArn, `${bucket.bucketArn}/*`],
+        conditions: {
+          Bool: {
+            'aws:SecureTransport': 'false',
+          },
         },
-      },
-    }));
-    
+      })
+    );
+
     // Create folder structure
     new s3deploy.BucketDeployment(this, 'CreateFolders', {
-      sources: [s3deploy.Source.data('uploads/.keep', ''), s3deploy.Source.data('documents/.keep', '')],
+      sources: [
+        s3deploy.Source.data('uploads/.keep', ''),
+        s3deploy.Source.data('documents/.keep', ''),
+      ],
       destinationBucket: bucket,
       retainOnDelete: false,
     });
-    
+
     // Add tags
     cdk.Tags.of(bucket).add('Purpose', 'LibreChat-Storage');
     cdk.Tags.of(bucket).add('Environment', props.environment);
-    
+
     return bucket;
   }
-  
+
   private createEfsStorage(props: StorageConstructProps): void {
     if (!props.vpc) {
       throw new Error('VPC is required for EFS storage');
     }
-    
+
     // Create security group for EFS
     this.efsSecurityGroup = new ec2.SecurityGroup(this, 'EfsSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for EFS mount targets',
-      allowAllOutbound: true,  // Allow outbound for EFS to communicate with AWS services
+      allowAllOutbound: true, // Allow outbound for EFS to communicate with AWS services
     });
-    
+
     // Create EFS file system
     this.fileSystem = new efs.FileSystem(this, 'SharedFileSystem', {
       vpc: props.vpc,
@@ -135,24 +136,23 @@ export class StorageConstruct extends Construct {
       outOfInfrequentAccessPolicy: efs.OutOfInfrequentAccessPolicy.AFTER_1_ACCESS,
       encrypted: true,
       enableAutomaticBackups: props.environment === 'production',
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
-    
+
     // Create access points for different services
     this.createAccessPoints();
-    
+
     // Add tags
     cdk.Tags.of(this.fileSystem).add('Purpose', 'LibreChat-SharedStorage');
     cdk.Tags.of(this.fileSystem).add('Environment', props.environment);
   }
-  
+
   private createAccessPoints(): void {
     if (!this.fileSystem) {
       return;
     }
-    
+
     // Access point for LibreChat uploads
     this.accessPoints['librechat-uploads'] = this.fileSystem.addAccessPoint('LibreChatUploadsAP', {
       path: '/librechat/uploads',
@@ -166,7 +166,7 @@ export class StorageConstruct extends Construct {
         uid: '1000',
       },
     });
-    
+
     // Access point for Meilisearch data
     this.accessPoints['meilisearch'] = this.fileSystem.addAccessPoint('MeilisearchAP', {
       path: '/meilisearch/data',
@@ -180,7 +180,7 @@ export class StorageConstruct extends Construct {
         uid: '1001',
       },
     });
-    
+
     // Access point for shared configuration
     this.accessPoints['config'] = this.fileSystem.addAccessPoint('ConfigAP', {
       path: '/shared/config',
@@ -194,7 +194,7 @@ export class StorageConstruct extends Construct {
         uid: '0',
       },
     });
-    
+
     // Access point for logs
     this.accessPoints['logs'] = this.fileSystem.addAccessPoint('LogsAP', {
       path: '/shared/logs',
@@ -209,21 +209,22 @@ export class StorageConstruct extends Construct {
       },
     });
   }
-  
+
   public grantReadWrite(grantee: iam.IGrantable): void {
     // Grant S3 permissions
     this.s3Bucket.grantReadWrite(grantee);
-    
+
     // Grant EFS permissions if enabled
     if (this.fileSystem) {
-      this.fileSystem.grant(grantee, 
+      this.fileSystem.grant(
+        grantee,
         'elasticfilesystem:ClientMount',
         'elasticfilesystem:ClientWrite',
         'elasticfilesystem:ClientRootAccess'
       );
     }
   }
-  
+
   /**
    * Allow an ECS service to mount the EFS file system
    */
