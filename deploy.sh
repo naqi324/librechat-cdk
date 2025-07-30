@@ -4,6 +4,9 @@
 
 set -e
 
+# Enable AWS SDK to load config file (required for SSO and advanced auth)
+export AWS_SDK_LOAD_CONFIG=1
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -214,13 +217,27 @@ else
     HAS_AWS_CLI=true
     
     # Check AWS credentials
+    print_status "Checking AWS credentials..."
     if ! aws sts get-caller-identity &> /dev/null; then
-        print_warning "AWS credentials not configured"
-        echo "  Run: aws configure"
+        print_error "AWS credentials not configured or expired"
+        
+        # Check if using SSO
+        if [ -n "$AWS_PROFILE" ] && grep -q "sso_start_url" ~/.aws/config 2>/dev/null; then
+            print_warning "SSO session appears to be expired"
+            echo "Please run: aws sso login --profile $AWS_PROFILE"
+        else
+            echo "Please configure AWS credentials using one of these methods:"
+            echo "  1. AWS SSO: aws configure sso"
+            echo "  2. IAM User: aws configure"
+            echo "  3. Environment variables: export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=..."
+        fi
+        exit 1
     else
         AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
         AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
-        print_status "AWS Account: $AWS_ACCOUNT, Region: $AWS_REGION"
+        AWS_PROFILE_NAME=${AWS_PROFILE:-"default"}
+        print_success "AWS authenticated successfully"
+        print_status "Account: $AWS_ACCOUNT | Region: $AWS_REGION | Profile: $AWS_PROFILE_NAME"
     fi
 fi
 

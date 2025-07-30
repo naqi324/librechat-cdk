@@ -3,6 +3,9 @@
 
 set -e
 
+# Enable AWS SDK to load config file (required for SSO and advanced auth)
+export AWS_SDK_LOAD_CONFIG=1
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,9 +60,17 @@ prompt_with_default() {
 
 check_aws_config() {
     if [ -z "$ACCOUNT_ID" ]; then
-        echo -e "${RED}AWS CLI is not configured. Please run 'aws configure'${NC}"
+        echo -e "${RED}AWS credentials not configured or expired${NC}"
+        
+        if [ -n "$AWS_PROFILE" ] && grep -q "sso_start_url" ~/.aws/config 2>/dev/null; then
+            echo -e "${YELLOW}SSO session appears to be expired${NC}"
+            echo "Please run: aws sso login --profile $AWS_PROFILE"
+        else
+            echo "Please run 'aws configure' or set up AWS SSO"
+        fi
         exit 1
     fi
+    echo -e "${GREEN}✓ AWS CLI configured - Account: $ACCOUNT_ID, Region: $REGION${NC}"
 }
 
 check_status() {

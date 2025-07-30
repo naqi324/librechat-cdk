@@ -1,5 +1,25 @@
 # AWS Authentication Guide for LibreChat CDK
 
+## Important Configuration Requirement
+
+⚠️ **Critical**: For AWS SSO and some advanced authentication methods to work properly with CDK, you must set:
+
+```bash
+export AWS_SDK_LOAD_CONFIG=1
+```
+
+This environment variable enables the AWS SDK to read configuration from `~/.aws/config`, which is required for:
+- AWS SSO profiles
+- Named profiles with assume role configurations
+- Custom credential process configurations
+
+**We recommend adding this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):**
+
+```bash
+echo 'export AWS_SDK_LOAD_CONFIG=1' >> ~/.bashrc
+source ~/.bashrc
+```
+
 ## Error: "AWS CLI is not configured"
 
 This error occurs when the AWS CLI cannot find valid credentials. Here are several ways to configure AWS access:
@@ -136,6 +156,14 @@ aws sts get-caller-identity
 
 ## Troubleshooting
 
+### "The security token included in the request is expired":
+- **Cause**: SSO token expired and AWS_SDK_LOAD_CONFIG not set
+- **Solution**:
+  ```bash
+  export AWS_SDK_LOAD_CONFIG=1
+  aws sso login --profile your-profile
+  ```
+
 ### "Invalid credentials" error:
 - Check access key and secret key are correct
 - Ensure the key is active in IAM console
@@ -144,10 +172,36 @@ aws sts get-caller-identity
 ### "Access denied" error:
 - Your IAM user/role lacks required permissions
 - Check the IAM policy attached to your user/role
+- Clear CDK context if switching accounts: `cdk context --clear`
 
 ### "Region not specified" error:
 - Set AWS_DEFAULT_REGION environment variable
 - Or specify region in aws configure
+
+### SSO Profile Not Working:
+- **Cause**: AWS_SDK_LOAD_CONFIG not set
+- **Solution**:
+  ```bash
+  # Temporary fix
+  export AWS_SDK_LOAD_CONFIG=1
+  
+  # Permanent fix
+  echo 'export AWS_SDK_LOAD_CONFIG=1' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+## Quick Authentication Check
+
+Run our authentication check script:
+```bash
+./scripts/check-aws-auth.sh
+```
+
+This script will:
+- Detect your authentication method
+- Check if credentials are valid
+- Automatically prompt for SSO login if needed
+- Provide specific guidance for any issues
 
 ## For GitHub Actions / CI/CD
 
