@@ -236,7 +236,7 @@ else
         AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
         AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
         AWS_PROFILE_NAME=${AWS_PROFILE:-"default"}
-        print_success "AWS authenticated successfully"
+        print_status "AWS authenticated successfully"
         print_status "Account: $AWS_ACCOUNT | Region: $AWS_REGION | Profile: $AWS_PROFILE_NAME"
     fi
 fi
