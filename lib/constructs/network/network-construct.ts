@@ -107,13 +107,13 @@ export class VpcConstruct extends Construct {
     });
 
     // Secrets Manager endpoint is required for Lambda functions without NAT gateway
-    const secretsEndpoint = vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
+    vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
       service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
       privateDnsEnabled: true,
     });
     
     // CloudWatch Logs endpoint for Lambda logging
-    const logsEndpoint = vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
+    vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
       service: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
       privateDnsEnabled: true,
     });
