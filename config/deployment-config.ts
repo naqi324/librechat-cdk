@@ -13,7 +13,7 @@ export const environmentConfigs = {
       natGateways: 0, // Cost savings for dev
     },
     databaseConfig: {
-      engine: 'postgres-and-documentdb' as const,
+      engine: 'postgres' as const, // Removed DocumentDB to avoid Lambda connectivity issues
       instanceClass: 'db.t3.small',
       allocatedStorage: 20,
       backupRetentionDays: 1,
@@ -250,9 +250,21 @@ For examples, see config/development.env.example or config/ecs-deployment.env.ex
 
 // Preset configurations for common scenarios
 export const presetConfigs = {
-  // Minimal development setup
+  // Minimal development setup - no DocumentDB, no NAT gateways
   minimalDev: new DeploymentConfigBuilder('development')
     .withFeatures({ rag: false, meilisearch: false })
+    .withVpc({
+      useExisting: false,
+      cidr: '10.0.0.0/16',
+      maxAzs: 2,
+      natGateways: 0, // No NAT gateways for cost savings
+    })
+    .withDatabase({
+      engine: 'postgres' as const, // PostgreSQL only, no DocumentDB
+      instanceClass: 'db.t3.micro',
+      allocatedStorage: 20,
+      backupRetentionDays: 1,
+    })
     .withCompute({ instanceType: 't3.medium' }),
 
   // Standard development setup

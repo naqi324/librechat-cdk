@@ -106,13 +106,16 @@ export class VpcConstruct extends Construct {
       ],
     });
 
-    // Secrets Manager endpoint is required for Lambda functions in isolated subnets
-    vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
+    // Secrets Manager endpoint is required for Lambda functions without NAT gateway
+    const secretsEndpoint = vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
       service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
       privateDnsEnabled: true,
-      subnets: {
-        subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
-      },
+    });
+    
+    // CloudWatch Logs endpoint for Lambda logging
+    const logsEndpoint = vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
+      service: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
+      privateDnsEnabled: true,
     });
 
     // Interface endpoints for production (these have costs)
@@ -128,11 +131,6 @@ export class VpcConstruct extends Construct {
         privateDnsEnabled: true,
       });
 
-      // CloudWatch Logs endpoint
-      vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
-        service: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
-        privateDnsEnabled: true,
-      });
 
       // Bedrock endpoints for AI services
       vpc.addInterfaceEndpoint('BedrockEndpoint', {

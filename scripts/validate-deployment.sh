@@ -5,6 +5,9 @@
 
 set -e
 
+# Export AWS_SDK_LOAD_CONFIG for SSO support
+export AWS_SDK_LOAD_CONFIG=1
+
 echo "🔍 LibreChat CDK Deployment Validator"
 echo "===================================="
 
@@ -141,6 +144,58 @@ validate_cdk_synthesis() {
     fi
 }
 
+# Check configuration compatibility
+check_configuration_compatibility() {
+    echo -e "\n🔧 Checking Configuration Compatibility..."
+    
+    CONFIG_SOURCE=${1:-minimal-dev}
+    
+    # Check for known good configurations
+    case "$CONFIG_SOURCE" in
+        "minimal-dev")
+            print_status "success" "Minimal dev config: No DocumentDB, no NAT gateways required"
+            ;;
+        "development")
+            print_status "success" "Development config: PostgreSQL only, no NAT gateways required"
+            ;;
+        "standard-dev"|"full-dev")
+            print_status "warning" "This configuration may require NAT gateways for full functionality"
+            ;;
+        "production-ec2"|"production-ecs"|"enterprise")
+            print_status "info" "Production configurations include NAT gateways and full features"
+            ;;
+    esac
+    
+    # Check environment variables for conflicts
+    NAT_GATEWAYS=${NAT_GATEWAYS:-}
+    DATABASE_ENGINE=${DATABASE_ENGINE:-}
+    DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-EC2}
+    
+    # Critical: DocumentDB without NAT gateways
+    if [[ "$DATABASE_ENGINE" == *"documentdb"* ]] && [[ "$NAT_GATEWAYS" == "0" ]]; then
+        print_status "error" "DocumentDB requires NAT gateways for Lambda initialization"
+        echo "  Fix: Use 'postgres' engine only or set NAT_GATEWAYS=1"
+        return 1
+    fi
+    
+    # Critical: ECS without NAT gateways  
+    if [[ "$DEPLOYMENT_MODE" == "ECS" ]] && [[ "$NAT_GATEWAYS" == "0" ]]; then
+        print_status "error" "ECS deployment requires NAT gateways for container image pulls"
+        echo "  Fix: Set NAT_GATEWAYS=1 for ECS deployments"
+        return 1
+    fi
+    
+    # Check for existing failed stacks
+    STACK_NAME="LibreChatStack-${CONFIG_SOURCE//-*/}"
+    if aws cloudformation describe-stacks --stack-name $STACK_NAME &> /dev/null 2>&1; then
+        STATUS=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].StackStatus" --output text)
+        if [[ "$STATUS" == "CREATE_FAILED" ]] || [[ "$STATUS" == "ROLLBACK_COMPLETE" ]]; then
+            print_status "warning" "Existing stack $STACK_NAME is in failed state: $STATUS"
+            echo "  Consider running 'cdk destroy' before redeploying"
+        fi
+    fi
+}
+
 # Check CDK bootstrap
 check_cdk_bootstrap() {
     echo -e "\n🥾 Checking CDK Bootstrap..."
@@ -199,6 +254,7 @@ main() {
         echo "Running pre-deployment checks..."
         check_prerequisites
         check_aws_credentials
+        check_configuration_compatibility "$CONFIG_SOURCE"
         check_lambda_layers
         check_typescript_build
         validate_cdk_synthesis "$CONFIG_SOURCE" "$KEY_PAIR"

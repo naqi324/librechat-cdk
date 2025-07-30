@@ -1,30 +1,37 @@
-# AWS Credentials Error Resolution Plan
+# LibreChat CDK Deployment Fix Plan
 
 ## Executive Summary
 
-This plan addresses the critical AWS authentication error: **"The security token included in the request is expired"**. The root cause is the missing `AWS_SDK_LOAD_CONFIG=1` environment variable, which prevents the AWS SDK from properly loading SSO configurations and other advanced authentication methods from `~/.aws/config`. This comprehensive plan provides immediate fixes, long-term improvements, and detailed guidance for all AWS authentication scenarios.
+The LibreChat CDK deployment is failing due to fundamental architectural mismatches and configuration issues. The primary failures occur during DocumentDB initialization caused by:
 
-## Root Cause Analysis
+1. **Network Dead-End**: Lambda functions in PRIVATE_WITH_EGRESS subnets cannot reach AWS services without NAT gateways
+2. **VPC Endpoint Misconfiguration**: Secrets Manager endpoint only serves PRIVATE_ISOLATED subnets
+3. **Missing AWS_SDK_LOAD_CONFIG**: SSO authentication fails without this environment variable
+4. **Custom Resource Failures**: Poor error handling and timing issues with DocumentDB initialization
 
-### Primary Issue
-- **Missing Configuration**: `AWS_SDK_LOAD_CONFIG=1` is not set in any execution path
-- **Impact**: AWS SDK cannot read SSO profiles from `~/.aws/config`
-- **Result**: SSO tokens expire and cannot be refreshed, causing authentication failures
+**Impact**: Development deployments consistently fail at the DocumentDB initialization stage, causing full stack rollbacks.
 
-### Secondary Issues
-1. Deploy scripts continue execution despite credential warnings
-2. No automatic detection or handling of expired SSO tokens
-3. Cached CDK context may cause wrong-account deployments
-4. No pre-deployment credential validation
+## Immediate Fixes (Priority 1)
 
-## Immediate Solutions
+### 1. Fix AWS Credential Handling (15 minutes)
 
-### 1. Fix Package.json Scripts
+**Issue**: Missing `AWS_SDK_LOAD_CONFIG=1` prevents SSO authentication.
 
-**File**: `package.json`
+**Files to modify**:
 
-Update all deployment scripts to include `AWS_SDK_LOAD_CONFIG=1`:
+#### `scripts/deploy.sh` (line 10, after shebang)
+```bash
+#!/bin/bash
+export AWS_SDK_LOAD_CONFIG=1
+```
 
+#### `scripts/manage-bootstrap.sh` (line 11, after set commands)
+```bash
+set -e
+export AWS_SDK_LOAD_CONFIG=1
+```
+
+#### `package.json` (update all deploy scripts)
 ```json
 {
   "scripts": {
@@ -32,688 +39,474 @@ Update all deployment scripts to include `AWS_SDK_LOAD_CONFIG=1`:
     "deploy:dev": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk deploy -c configSource=standard-dev",
     "deploy:staging": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk deploy -c configSource=staging",
     "deploy:prod": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk deploy -c configSource=production-ecs",
-    "deploy:all": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk deploy --all",
-    "synth": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk synth",
-    "diff": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk diff",
-    "destroy": "AWS_SDK_LOAD_CONFIG=1 cdk destroy",
-    "bootstrap": "AWS_SDK_LOAD_CONFIG=1 cdk bootstrap",
-    "wizard": "AWS_SDK_LOAD_CONFIG=1 npm run build && bash scripts/deploy-interactive.sh"
+    "deploy:all": "AWS_SDK_LOAD_CONFIG=1 npm run build && cdk deploy --all"
   }
 }
 ```
 
-### 2. Fix deploy.sh Script
+### 2. Quick Network Fix for Development (30 minutes)
 
-**File**: `deploy.sh`
+**Option A: Add NAT Gateway (Increases cost by ~$45/month)**
 
-Add at line 1 (after shebang):
-```bash
-#!/bin/bash
-
-# Enable AWS SDK to load config file (required for SSO and advanced auth)
-export AWS_SDK_LOAD_CONFIG=1
-```
-
-Update credential check (line 217-225) to fail fast:
-```bash
-# Check AWS credentials
-print_status "Checking AWS credentials..."
-if ! aws sts get-caller-identity &> /dev/null; then
-    print_error "AWS credentials not configured or expired"
-    
-    # Check if using SSO
-    if [ -n "$AWS_PROFILE" ] && grep -q "sso_start_url" ~/.aws/config 2>/dev/null; then
-        print_warning "SSO session appears to be expired"
-        echo "Please run: aws sso login --profile $AWS_PROFILE"
-    else
-        echo "Please configure AWS credentials using one of these methods:"
-        echo "  1. AWS SSO: aws configure sso"
-        echo "  2. IAM User: aws configure"
-        echo "  3. Environment variables: export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=..."
-    fi
-    exit 1
-else
-    AWS_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
-    AWS_REGION=$(aws configure get region 2>/dev/null || echo "us-east-1")
-    AWS_PROFILE_NAME=${AWS_PROFILE:-"default"}
-    print_success "AWS authenticated successfully"
-    print_status "Account: $AWS_ACCOUNT | Region: $AWS_REGION | Profile: $AWS_PROFILE_NAME"
-fi
-```
-
-### 3. Fix manage-bootstrap.sh Script
-
-**File**: `scripts/manage-bootstrap.sh`
-
-Add after line 10:
-```bash
-#!/bin/bash
-
-# Enable AWS SDK to load config file (required for SSO and advanced auth)
-export AWS_SDK_LOAD_CONFIG=1
-```
-
-Update the check_aws_config function (line 58-63):
-```bash
-check_aws_config() {
-    if [ -z "$ACCOUNT_ID" ]; then
-        echo -e "${RED}AWS credentials not configured or expired${NC}"
-        
-        if [ -n "$AWS_PROFILE" ] && grep -q "sso_start_url" ~/.aws/config 2>/dev/null; then
-            echo -e "${YELLOW}SSO session appears to be expired${NC}"
-            echo "Please run: aws sso login --profile $AWS_PROFILE"
-        else
-            echo "Please run 'aws configure' or set up AWS SSO"
-        fi
-        exit 1
-    fi
-    echo -e "${GREEN}✓ AWS CLI configured - Account: $ACCOUNT_ID, Region: $REGION${NC}"
+#### `config/deployment-config.ts` (lines 13-17)
+```typescript
+development: {
+  environment: 'development',
+  vpcConfig: {
+    maxAzs: 2,
+    natGateways: 1, // Changed from 0 - REQUIRED for Lambda functions
+  },
 }
 ```
 
-### 4. Create Credential Helper Script
+**Option B: Remove DocumentDB from Development (Recommended)**
 
-**New File**: `scripts/check-aws-auth.sh`
+#### `config/deployment-config.ts` (lines 20-22)
+```typescript
+databaseConfig: {
+  engine: 'postgres' as const, // Changed from 'postgres-and-documentdb'
+  // DocumentDB not needed for development
+},
+```
 
-```bash
-#!/bin/bash
+### 3. Fix VPC Endpoint Configuration (45 minutes)
 
-# Enable AWS SDK to load config file
-export AWS_SDK_LOAD_CONFIG=1
+#### `lib/constructs/network/network-construct.ts` (lines 110-120)
+```typescript
+// Add Secrets Manager endpoint for ALL private subnets
+const secretsEndpoint = vpc.addInterfaceEndpoint('SecretsManagerEndpoint', {
+  service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+  privateDnsEnabled: true,
+  subnets: {
+    subnets: [...vpc.privateSubnets, ...vpc.isolatedSubnets], // All private subnets
+  },
+});
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+// Add CloudWatch Logs endpoint for Lambda logging
+vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
+  service: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
+  privateDnsEnabled: true,
+  subnets: {
+    subnets: [...vpc.privateSubnets, ...vpc.isolatedSubnets],
+  },
+});
+```
 
-echo "🔍 Checking AWS Authentication Status..."
+### 4. Fix Lambda Subnet Placement (30 minutes)
 
-# Function to check and refresh SSO
-check_sso_auth() {
-    local profile=$1
+#### `lib/constructs/database/database-construct.ts` (lines 327-331)
+```typescript
+const initFunction = new lambda.Function(this, 'InitDocDBFunction', {
+  // ... other config ...
+  vpcSubnets: {
+    subnetType: ec2.SubnetType.PRIVATE_ISOLATED, // Changed from PRIVATE_WITH_EGRESS
+  },
+  // ... rest of config ...
+});
+```
+
+### 5. Improve Resource Naming (20 minutes)
+
+#### `lib/constructs/base-construct.ts` (create new file)
+```typescript
+import * as cdk from 'aws-cdk-lib';
+
+export abstract class BaseConstruct extends cdk.Construct {
+  protected readonly uniqueSuffix: string;
+
+  constructor(scope: Construct, id: string) {
+    super(scope, id);
     
-    # Check if this is an SSO profile
-    if grep -q "sso_start_url" ~/.aws/config 2>/dev/null; then
-        echo "📋 SSO Profile detected: $profile"
-        
-        # Try to get caller identity
-        if ! aws sts get-caller-identity --profile "$profile" &>/dev/null; then
-            echo -e "${YELLOW}⚠️  SSO session expired or not authenticated${NC}"
-            echo "🔄 Initiating SSO login..."
+    // Use CDK node address for deterministic, unique naming
+    this.uniqueSuffix = cdk.Stack.of(this).node.addr.substring(0, 8);
+  }
+
+  protected generateResourceName(baseName: string): string {
+    const stack = cdk.Stack.of(this);
+    return `${stack.stackName}-${baseName}-${this.uniqueSuffix}`;
+  }
+}
+```
+
+Update all constructs to extend `BaseConstruct` and use `generateResourceName()`.
+
+## Architecture Improvements (Priority 2)
+
+### 1. Simplify Development Configuration
+
+Create a new minimal development configuration without DocumentDB:
+
+#### `config/presets/minimal-dev.preset.ts` (new file)
+```typescript
+import { DeploymentConfig } from '../deployment-config';
+
+export const minimalDevPreset: DeploymentConfig = {
+  environment: 'development',
+  deploymentMode: 'EC2',
+  vpcConfig: {
+    maxAzs: 2,
+    natGateways: 0, // No NAT needed without DocumentDB
+  },
+  databaseConfig: {
+    engine: 'postgres' as const,
+    instanceType: 't3.micro',
+    allocatedStorage: 20,
+    enableBackups: false,
+  },
+  computeConfig: {
+    instanceType: 't3.medium',
+    enableAutoScaling: false,
+  },
+  monitoringConfig: {
+    enableDashboard: false,
+    enableAlerts: false,
+  },
+  enableRag: false,
+  enableMeilisearch: false,
+  enableSharePoint: false,
+};
+```
+
+### 2. Add Pre-deployment Validation
+
+#### `scripts/validate-config.ts` (new file)
+```typescript
+#!/usr/bin/env node
+import { DeploymentConfig } from '../config/deployment-config';
+
+function validateConfig(config: DeploymentConfig): string[] {
+  const errors: string[] = [];
+
+  // Check for incompatible configurations
+  if (config.vpcConfig.natGateways === 0) {
+    if (config.databaseConfig.engine.includes('documentdb')) {
+      errors.push('DocumentDB requires NAT gateways for Lambda initialization');
+    }
+    if (config.deploymentMode === 'ECS') {
+      errors.push('ECS deployment requires NAT gateways for image pulls');
+    }
+  }
+
+  // Validate subnet configuration
+  if (config.databaseConfig.engine.includes('documentdb') && !config.vpcConfig.createVpcEndpoints) {
+    errors.push('DocumentDB initialization requires VPC endpoints to be enabled');
+  }
+
+  return errors;
+}
+
+// Run validation
+const configSource = process.env.CONFIG_SOURCE || 'development';
+const config = loadConfig(configSource);
+const errors = validateConfig(config);
+
+if (errors.length > 0) {
+  console.error('Configuration validation failed:');
+  errors.forEach(error => console.error(`  - ${error}`));
+  process.exit(1);
+}
+```
+
+### 3. Improve Custom Resource Error Handling
+
+#### `lambda/init-docdb/init_docdb.py` (lines 379-420)
+```python
+def lambda_handler(event, context):
+    """CloudFormation custom resource handler with improved error handling"""
+    request_type = event['RequestType']
+    
+    try:
+        if request_type == 'Create':
+            # Wait for cluster to be available before attempting connection
+            wait_for_cluster_available(cluster_id, max_attempts=30)
+            result = initialize_documentdb(event)
+            send_response(event, context, 'SUCCESS', result)
             
-            if aws sso login --profile "$profile"; then
-                echo -e "${GREEN}✅ SSO authentication successful${NC}"
-                return 0
-            else
-                echo -e "${RED}❌ SSO authentication failed${NC}"
-                return 1
-            fi
-        else
-            echo -e "${GREEN}✅ SSO session is active${NC}"
-            return 0
-        fi
-    fi
-    return 2
+        elif request_type == 'Update':
+            # For updates, we don't need to reinitialize
+            logger.info("Update requested, no action needed")
+            send_response(event, context, 'SUCCESS', {})
+            
+        elif request_type == 'Delete':
+            # For deletes, just return success
+            logger.info("Delete requested, no action needed")
+            send_response(event, context, 'SUCCESS', {})
+            
+    except Exception as e:
+        logger.error(f"Failed to process {request_type}: {str(e)}")
+        send_response(event, context, 'FAILED', {
+            'Error': str(e),
+            'RequestType': request_type
+        })
+
+def wait_for_cluster_available(cluster_id, max_attempts=30):
+    """Wait for DocumentDB cluster to be available"""
+    docdb = boto3.client('docdb')
+    
+    for attempt in range(max_attempts):
+        try:
+            response = docdb.describe_db_clusters(DBClusterIdentifier=cluster_id)
+            cluster = response['DBClusters'][0]
+            
+            if cluster['Status'] == 'available':
+                logger.info(f"Cluster {cluster_id} is available")
+                return
+                
+            logger.info(f"Cluster status: {cluster['Status']}, waiting... (attempt {attempt + 1}/{max_attempts})")
+            time.sleep(30)  # Wait 30 seconds between checks
+            
+        except Exception as e:
+            logger.error(f"Error checking cluster status: {str(e)}")
+            time.sleep(30)
+    
+    raise Exception(f"Cluster {cluster_id} did not become available within {max_attempts * 30} seconds")
+```
+
+## Implementation Steps
+
+### Phase 1: Emergency Fix (Deploy Today)
+
+1. **Apply credential fix** (5 minutes)
+   ```bash
+   # Update package.json with AWS_SDK_LOAD_CONFIG=1
+   # Commit changes
+   git add package.json scripts/deploy.sh scripts/manage-bootstrap.sh
+   git commit -m "fix: add AWS_SDK_LOAD_CONFIG for SSO authentication"
+   ```
+
+2. **Choose quick network fix** (10 minutes)
+   - Either add NAT gateway OR remove DocumentDB from dev
+   - Update `config/deployment-config.ts`
+   ```bash
+   git add config/deployment-config.ts
+   git commit -m "fix: resolve network connectivity for Lambda functions"
+   ```
+
+3. **Deploy with minimal configuration** (20 minutes)
+   ```bash
+   npm run deploy:dev
+   ```
+
+### Phase 2: Proper Fix (This Week)
+
+1. **Implement VPC endpoint fixes**
+2. **Update Lambda subnet placement**
+3. **Add pre-deployment validation**
+4. **Improve custom resource handling**
+5. **Test all deployment modes**
+
+### Phase 3: Architecture Refactor (Next Sprint)
+
+1. **Create simplified preset configurations**
+2. **Separate concerns between dev/prod**
+3. **Add integration tests**
+4. **Update documentation**
+
+## Alternative Approaches
+
+### 1. Remove DocumentDB Entirely
+
+**Pros**:
+- Significantly reduces complexity
+- Saves ~$200/month in costs
+- Eliminates network configuration issues
+- PostgreSQL with JSON support can handle most use cases
+
+**Implementation**:
+```typescript
+// config/deployment-config.ts
+databaseConfig: {
+  engine: 'postgres' as const,
+  // Use PostgreSQL JSON columns instead of DocumentDB
 }
-
-# Main authentication check
-if [ -n "$AWS_PROFILE" ]; then
-    echo "🔧 Using AWS Profile: $AWS_PROFILE"
-    check_sso_auth "$AWS_PROFILE"
-    sso_status=$?
-    
-    if [ $sso_status -eq 2 ]; then
-        # Not an SSO profile, check standard credentials
-        if aws sts get-caller-identity &>/dev/null; then
-            echo -e "${GREEN}✅ AWS credentials are valid${NC}"
-        else
-            echo -e "${RED}❌ AWS credentials are invalid or expired${NC}"
-            exit 1
-        fi
-    elif [ $sso_status -ne 0 ]; then
-        exit 1
-    fi
-else
-    # No profile specified, check default credentials
-    if aws sts get-caller-identity &>/dev/null; then
-        echo -e "${GREEN}✅ Default AWS credentials are valid${NC}"
-    else
-        echo -e "${RED}❌ No valid AWS credentials found${NC}"
-        echo ""
-        echo "Configure AWS credentials using one of these methods:"
-        echo "  1. AWS SSO (recommended for organizations):"
-        echo "     aws configure sso"
-        echo ""
-        echo "  2. IAM User credentials:"
-        echo "     aws configure"
-        echo ""
-        echo "  3. Environment variables:"
-        echo "     export AWS_ACCESS_KEY_ID=your-access-key"
-        echo "     export AWS_SECRET_ACCESS_KEY=your-secret-key"
-        echo "     export AWS_DEFAULT_REGION=us-east-1"
-        echo ""
-        echo "  4. Use existing profile:"
-        echo "     export AWS_PROFILE=your-profile-name"
-        exit 1
-    fi
-fi
-
-# Display current identity
-echo ""
-echo "📍 Current AWS Identity:"
-aws sts get-caller-identity --output table
-
-# Check for potential issues
-echo ""
-echo "🔍 Checking for potential issues..."
-
-# Check if AWS_SDK_LOAD_CONFIG is set
-if [ "$AWS_SDK_LOAD_CONFIG" != "1" ]; then
-    echo -e "${YELLOW}⚠️  AWS_SDK_LOAD_CONFIG is not set. SSO profiles may not work.${NC}"
-    echo "   Run: export AWS_SDK_LOAD_CONFIG=1"
-fi
-
-# Check for cached context mismatches
-if [ -f "cdk.context.json" ]; then
-    cached_account=$(grep -o '"account":[[:space:]]*"[0-9]*"' cdk.context.json | grep -o '[0-9]\+' | head -1)
-    current_account=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
-    
-    if [ -n "$cached_account" ] && [ "$cached_account" != "$current_account" ]; then
-        echo -e "${YELLOW}⚠️  CDK context cached for different account ($cached_account)${NC}"
-        echo "   Current account: $current_account"
-        echo "   Consider running: cdk context --clear"
-    fi
-fi
-
-echo ""
-echo -e "${GREEN}✅ Authentication check complete${NC}"
 ```
 
-Make the script executable:
-```bash
-chmod +x scripts/check-aws-auth.sh
+### 2. Use RDS Proxy
+
+**Pros**:
+- Better connection pooling
+- Enhanced security
+- Simplified Lambda connectivity
+
+**Implementation**:
+```typescript
+const proxy = new rds.DatabaseProxy(this, 'DBProxy', {
+  proxyTarget: rds.ProxyTarget.fromCluster(cluster),
+  secrets: [cluster.secret!],
+  vpc,
+  securityGroups: [dbSecurityGroup],
+});
 ```
 
-### 5. Update AWS_AUTHENTICATION.md
+### 3. Containerize Database Initialization
 
-**File**: `AWS_AUTHENTICATION.md`
+Instead of Lambda functions, use ECS tasks for initialization:
+- Better timeout control
+- Easier debugging
+- Can use existing container infrastructure
 
-Add a new section after the introduction:
+## Validation & Testing
 
-```markdown
-## Important Configuration Requirement
-
-⚠️ **Critical**: For AWS SSO and some advanced authentication methods to work properly with CDK, you must set:
+### 1. Pre-deployment Checklist
 
 ```bash
-export AWS_SDK_LOAD_CONFIG=1
+#!/bin/bash
+# pre-deploy-check.sh
+
+echo "Running pre-deployment validation..."
+
+# Check AWS credentials
+if ! aws sts get-caller-identity > /dev/null 2>&1; then
+  echo "❌ AWS credentials not configured"
+  exit 1
+fi
+
+# Validate configuration
+npm run validate-config
+
+# Check for required parameters
+if [ -z "$KEY_PAIR_NAME" ]; then
+  echo "❌ KEY_PAIR_NAME not set"
+  exit 1
+fi
+
+echo "✅ Pre-deployment validation passed"
 ```
 
-This environment variable enables the AWS SDK to read configuration from `~/.aws/config`, which is required for:
-- AWS SSO profiles
-- Named profiles with assume role configurations
-- Custom credential process configurations
-
-**We recommend adding this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):**
+### 2. Post-deployment Verification
 
 ```bash
-echo 'export AWS_SDK_LOAD_CONFIG=1' >> ~/.bashrc
-source ~/.bashrc
+# verify-deployment.sh
+
+# Check stack status
+aws cloudformation describe-stacks --stack-name "LibreChatStack-$DEPLOYMENT_ENV" \
+  --query 'Stacks[0].StackStatus' --output text
+
+# Test database connectivity
+aws lambda invoke --function-name "LibreChatStack-$DEPLOYMENT_ENV-HealthCheck" \
+  --payload '{"action":"testDatabase"}' response.json
+
+# Verify application endpoint
+curl -f "http://$APP_ENDPOINT/health" || exit 1
 ```
-```
 
-### 6. Add Pre-deployment Validation
-
-**File**: `bin/librechat.ts`
-
-Add credential validation before stack creation (after line 130):
+### 3. Integration Tests
 
 ```typescript
-// Validate AWS credentials before proceeding
-async function validateCredentials() {
-  try {
-    const sts = new AWS.STS();
-    const identity = await sts.getCallerIdentity().promise();
-    console.log(`✅ Authenticated as: ${identity.Arn}`);
-    console.log(`   Account: ${identity.Account}`);
+// test/integration/deployment.test.ts
+describe('Deployment Integration Tests', () => {
+  test('Lambda can reach Secrets Manager', async () => {
+    const lambda = new AWS.Lambda();
+    const result = await lambda.invoke({
+      FunctionName: 'test-secrets-access',
+      Payload: JSON.stringify({ secretName: 'test-secret' }),
+    }).promise();
     
-    // Warn if account doesn't match expected
-    if (process.env.AWS_ACCOUNT_ID && identity.Account !== process.env.AWS_ACCOUNT_ID) {
-      console.warn(`⚠️  Warning: Current account (${identity.Account}) doesn't match AWS_ACCOUNT_ID (${process.env.AWS_ACCOUNT_ID})`);
-    }
-    
-    return identity.Account;
-  } catch (error) {
-    console.error('❌ AWS Authentication Error:', error.message);
-    
-    if (error.code === 'ExpiredToken' || error.code === 'ExpiredTokenException') {
-      console.error('\n🔄 Your AWS session has expired.');
-      
-      if (process.env.AWS_PROFILE) {
-        console.error(`   Run: aws sso login --profile ${process.env.AWS_PROFILE}`);
-      } else {
-        console.error('   If using SSO, run: aws sso login --profile <your-profile>');
-        console.error('   If using IAM credentials, run: aws configure');
-      }
-    } else if (error.code === 'CredentialsNotFound' || error.code === 'NoCredentialsError') {
-      console.error('\n❓ No AWS credentials found.');
-      console.error('   See AWS_AUTHENTICATION.md for setup instructions.');
-    }
-    
-    console.error('\n💡 Tip: Make sure AWS_SDK_LOAD_CONFIG=1 is set for SSO profiles to work.');
-    process.exit(1);
-  }
-}
+    expect(result.StatusCode).toBe(200);
+  });
 
-// Call validation before creating stack
-validateCredentials().then(accountId => {
-  const stack = new LibreChatStack(app, `LibreChatStack-${config.environment}`, {
-    ...config,
-    env: {
-      account: process.env.CDK_DEFAULT_ACCOUNT || accountId || 'unknown',
-      region: process.env.CDK_DEFAULT_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
-    },
+  test('DocumentDB initialization completes', async () => {
+    // Test custom resource lifecycle
   });
 });
 ```
 
-## Resolution Steps by Authentication Method
+## Long-term Recommendations
 
-### For AWS SSO Users
-
-1. **Immediate Fix**:
-   ```bash
-   # Set the required environment variable
-   export AWS_SDK_LOAD_CONFIG=1
-   
-   # Add to your shell profile for persistence
-   echo 'export AWS_SDK_LOAD_CONFIG=1' >> ~/.bashrc
-   
-   # Login to SSO
-   aws sso login --profile your-sso-profile
-   
-   # Set the profile
-   export AWS_PROFILE=your-sso-profile
-   
-   # Verify authentication
-   ./scripts/check-aws-auth.sh
-   
-   # Deploy
-   npm run deploy
-   ```
-
-2. **If SSO session expired during deployment**:
-   ```bash
-   # The new scripts will detect this and prompt you
-   aws sso login --profile your-sso-profile
-   
-   # Resume deployment
-   npm run deploy
-   ```
-
-### For IAM User Credentials
-
-1. **Using aws configure**:
-   ```bash
-   aws configure
-   # Enter your Access Key ID
-   # Enter your Secret Access Key
-   # Enter your default region
-   # Enter output format (json recommended)
-   
-   # Verify
-   ./scripts/check-aws-auth.sh
-   ```
-
-2. **Using environment variables**:
-   ```bash
-   export AWS_ACCESS_KEY_ID=your-access-key
-   export AWS_SECRET_ACCESS_KEY=your-secret-key
-   export AWS_DEFAULT_REGION=us-east-1
-   
-   # Verify
-   ./scripts/check-aws-auth.sh
-   ```
-
-### For Named Profiles
-
-```bash
-# Set the required environment variable
-export AWS_SDK_LOAD_CONFIG=1
-
-# Use your profile
-export AWS_PROFILE=your-profile-name
-
-# Verify
-./scripts/check-aws-auth.sh
-
-# Deploy
-npm run deploy
-```
-
-### For Instance Roles (EC2/CloudShell)
-
-Instance roles should work without changes, but verify:
-
-```bash
-# Check instance metadata
-curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/
-
-# Verify authentication
-./scripts/check-aws-auth.sh
-```
-
-## Testing and Validation
-
-### 1. Test Authentication Script
-
-```bash
-# Run the new credential checker
-./scripts/check-aws-auth.sh
-
-# Expected output:
-# ✅ AWS credentials are valid
-# 📍 Current AWS Identity: [your details]
-```
-
-### 2. Test CDK Commands
-
-```bash
-# Test synthesis (doesn't deploy)
-npm run synth
-
-# Test diff (shows what would change)
-npm run diff
-
-# If both work, proceed with deployment
-npm run deploy
-```
-
-### 3. Validate Environment Variable
-
-```bash
-# Check if AWS_SDK_LOAD_CONFIG is set
-echo $AWS_SDK_LOAD_CONFIG
-# Should output: 1
-
-# If not set:
-export AWS_SDK_LOAD_CONFIG=1
-```
-
-### 4. Clear CDK Context if Switching Accounts
-
-```bash
-# Check current context
-cat cdk.context.json | grep account
-
-# Clear if switching accounts
-cdk context --clear
-
-# Or remove the file
-rm cdk.context.json
-```
-
-## Long-term Improvements
-
-### 1. Enhanced Credential Management Script
-
-Create `scripts/aws-auth-manager.sh`:
-
-```bash
-#!/bin/bash
-
-# Comprehensive AWS authentication manager
-# Handles SSO, IAM, and profile management
-
-source scripts/check-aws-auth.sh
-
-case "$1" in
-  "login")
-    # Smart login based on current configuration
-    if [ -n "$AWS_PROFILE" ]; then
-      aws sso login --profile "$AWS_PROFILE"
-    else
-      echo "No AWS_PROFILE set. Use: aws-auth-manager switch <profile>"
-    fi
-    ;;
-    
-  "switch")
-    # Switch between profiles
-    export AWS_PROFILE=$2
-    echo "Switched to profile: $AWS_PROFILE"
-    check_sso_auth "$AWS_PROFILE"
-    ;;
-    
-  "status")
-    # Show current status
-    ./scripts/check-aws-auth.sh
-    ;;
-    
-  "refresh")
-    # Refresh credentials
-    if [ -n "$AWS_PROFILE" ]; then
-      aws sso login --profile "$AWS_PROFILE"
-    fi
-    ;;
-    
-  *)
-    echo "Usage: aws-auth-manager {login|switch|status|refresh}"
-    ;;
-esac
-```
-
-### 2. Add to .env.example
-
-Create `.env.example` with AWS configuration hints:
-
-```bash
-# AWS Configuration (optional - can use AWS CLI/SSO instead)
-# AWS_PROFILE=your-profile-name
-# AWS_DEFAULT_REGION=us-east-1
-# AWS_SDK_LOAD_CONFIG=1
-
-# Deployment Configuration
-DEPLOYMENT_MODE=EC2
-DEPLOYMENT_ENV=development
-# ... rest of configuration
-```
-
-### 3. Automated Token Refresh
-
-Add to `deploy.sh` for long-running deployments:
-
-```bash
-# Function to refresh credentials if needed
-refresh_credentials_if_needed() {
-    if ! aws sts get-caller-identity &>/dev/null; then
-        echo "🔄 Credentials expired during deployment. Refreshing..."
-        
-        if [ -n "$AWS_PROFILE" ] && aws sso login --profile "$AWS_PROFILE"; then
-            echo "✅ Credentials refreshed successfully"
-            return 0
-        else
-            echo "❌ Failed to refresh credentials"
-            return 1
-        fi
-    fi
-    return 0
-}
-
-# Call before each major CDK operation
-refresh_credentials_if_needed || exit 1
-```
-
-### 4. GitHub Actions / CI/CD Configuration
-
-For CI/CD environments, add to workflow:
+### 1. Adopt GitOps Workflow
 
 ```yaml
-env:
-  AWS_SDK_LOAD_CONFIG: 1
+# .github/workflows/deploy.yml
+name: Deploy LibreChat
+on:
+  push:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: npm install
+      - run: npm run validate-config
+      - run: npm test
   
-steps:
-  - name: Configure AWS credentials
-    uses: aws-actions/configure-aws-credentials@v2
-    with:
-      role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-      aws-region: us-east-1
-      
-  - name: Deploy CDK
-    run: |
-      export AWS_SDK_LOAD_CONFIG=1
-      npm run deploy
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v2
+      - run: npm run deploy:${{ github.ref_name }}
 ```
 
-## Troubleshooting Guide
+### 2. Implement Progressive Deployment
 
-### Common Issues and Solutions
-
-#### 1. "The security token included in the request is expired"
-
-**Cause**: SSO token expired and AWS_SDK_LOAD_CONFIG not set
-**Solution**:
-```bash
-export AWS_SDK_LOAD_CONFIG=1
-aws sso login --profile your-profile
+```typescript
+// Create separate stacks for each component
+const networkStack = new NetworkStack(app, 'NetworkStack');
+const databaseStack = new DatabaseStack(app, 'DatabaseStack', {
+  vpc: networkStack.vpc,
+});
+const computeStack = new ComputeStack(app, 'ComputeStack', {
+  vpc: networkStack.vpc,
+  database: databaseStack.database,
+});
 ```
 
-#### 2. "Missing credentials in config"
+### 3. Add Comprehensive Monitoring
 
-**Cause**: No credentials configured or wrong profile
-**Solution**:
-```bash
-# Check current profile
-echo $AWS_PROFILE
-
-# List available profiles
-aws configure list-profiles
-
-# Set correct profile
-export AWS_PROFILE=correct-profile
+```typescript
+// monitoring/alarms.ts
+new cloudwatch.Alarm(this, 'DeploymentFailureAlarm', {
+  metric: new cloudwatch.Metric({
+    namespace: 'AWS/CloudFormation',
+    metricName: 'StackCreateFailed',
+    dimensionsMap: {
+      StackName: stack.stackName,
+    },
+  }),
+  threshold: 1,
+  evaluationPeriods: 1,
+});
 ```
 
-#### 3. "Could not load credentials from any providers"
+### 4. Maintain Clear Documentation
 
-**Cause**: AWS SDK can't find credentials in the chain
-**Solution**:
-```bash
-# Run the auth checker
-./scripts/check-aws-auth.sh
+- Document all configuration options with examples
+- Add architecture diagrams
+- Create runbooks for common issues
+- Maintain changelog of infrastructure changes
 
-# Follow its recommendations
+### 5. Regular Dependency Updates
+
+```json
+{
+  "scripts": {
+    "update-deps": "npm update && npm audit fix",
+    "check-deps": "npm outdated",
+    "security-scan": "npm audit"
+  }
+}
 ```
 
-#### 4. "AccessDenied" with valid credentials
+## Success Criteria
 
-**Cause**: Account mismatch or insufficient permissions
-**Solution**:
-```bash
-# Clear CDK context
-cdk context --clear
+1. **Immediate**: Development deployment completes successfully
+2. **Short-term**: All deployment modes work reliably
+3. **Long-term**: 
+   - Deployment success rate > 95%
+   - Average deployment time < 15 minutes
+   - Zero security vulnerabilities
+   - Clear separation of concerns
+   - Comprehensive test coverage
 
-# Verify account
-aws sts get-caller-identity
+## Risk Mitigation
 
-# Check required permissions in SECURITY.md
-```
-
-#### 5. SSO Profile Not Working
-
-**Cause**: AWS_SDK_LOAD_CONFIG not set
-**Solution**:
-```bash
-# Temporary fix
-export AWS_SDK_LOAD_CONFIG=1
-
-# Permanent fix
-echo 'export AWS_SDK_LOAD_CONFIG=1' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### Debug Mode
-
-Enable verbose output for troubleshooting:
-
-```bash
-# Enable CDK debug output
-export CDK_DEBUG=true
-
-# Enable AWS SDK debug output
-export AWS_SDK_LOAD_CONFIG=1
-export DEBUG=aws-sdk:*
-
-# Run deployment
-npm run deploy 2>&1 | tee deploy-debug.log
-```
-
-## Security Best Practices
-
-### 1. Never Commit Credentials
-
-- Add to `.gitignore`:
-  ```
-  .env
-  .env.local
-  .aws/
-  ```
-
-### 2. Use Temporary Credentials
-
-- Prefer AWS SSO over long-lived IAM credentials
-- Use role assumption for cross-account access
-- Implement credential rotation
-
-### 3. Validate Account Before Deployment
-
-- Always verify you're deploying to the correct account:
-  ```bash
-  aws sts get-caller-identity
-  ```
-
-### 4. Use MFA When Possible
-
-- Configure MFA for IAM users
-- SSO enforces MFA at the organization level
-
-### 5. Principle of Least Privilege
-
-- Grant only necessary permissions
-- Use separate roles for dev/staging/prod
-
-## Implementation Timeline
-
-### Phase 1: Immediate (Do Now)
-1. ✅ Add `export AWS_SDK_LOAD_CONFIG=1` to your shell
-2. ✅ Update package.json scripts
-3. ✅ Fix deploy.sh and manage-bootstrap.sh
-4. ✅ Create check-aws-auth.sh script
-5. ✅ Test with your current authentication method
-
-### Phase 2: Short-term (This Week)
-1. 📝 Update AWS_AUTHENTICATION.md documentation
-2. 📝 Add pre-deployment validation to CDK app
-3. 📝 Create comprehensive auth manager script
-4. 📝 Test with all authentication methods
-
-### Phase 3: Long-term (This Month)
-1. 📋 Implement automated token refresh
-2. 📋 Add CI/CD configurations
-3. 📋 Create team onboarding guide
-4. 📋 Implement monitoring for auth failures
-
-## Success Metrics
-
-After implementing this plan:
-
-1. ✅ No more "expired token" errors for SSO users
-2. ✅ Clear error messages guide users to solutions
-3. ✅ Deployment scripts fail fast with helpful messages
-4. ✅ All authentication methods work consistently
-5. ✅ Reduced support requests for auth issues
+1. **Always test in development first**
+2. **Keep rollback procedures ready**
+3. **Monitor CloudFormation events during deployment**
+4. **Have AWS support contact ready for production**
+5. **Document all changes in git commits**
 
 ## Conclusion
 
-The AWS credential expiration issue is primarily caused by the missing `AWS_SDK_LOAD_CONFIG=1` environment variable. This plan provides immediate fixes that can be implemented in minutes, plus long-term improvements for robust credential management. Following this plan will resolve current authentication issues and prevent future occurrences.
-
-Remember: **Always set `export AWS_SDK_LOAD_CONFIG=1` when using AWS SSO or advanced authentication methods.**
+The LibreChat CDK deployment failures are solvable with targeted fixes to network configuration, credential handling, and resource initialization. The immediate priority is getting development deployments working, followed by architectural improvements to prevent similar issues in the future. The recommended approach balances quick fixes with long-term sustainability.

@@ -55,6 +55,7 @@ lerna-debug.log*
 
 # Claude Code
 .claude/
+agents/
 CLAUDE.md
 claude-code-storage/
 claude-instance-1/
