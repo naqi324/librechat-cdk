@@ -118,6 +118,18 @@ export class VpcConstruct extends Construct {
       privateDnsEnabled: true,
     });
 
+    // Lambda endpoint for function execution
+    vpc.addInterfaceEndpoint('LambdaEndpoint', {
+      service: ec2.InterfaceVpcEndpointAwsService.LAMBDA,
+      privateDnsEnabled: true,
+    });
+
+    // KMS endpoint for secret decryption
+    vpc.addInterfaceEndpoint('KmsEndpoint', {
+      service: ec2.InterfaceVpcEndpointAwsService.KMS,
+      privateDnsEnabled: true,
+    });
+
     // Interface endpoints for production (these have costs)
     if (environment === 'production') {
       // ECR endpoints for container pulls

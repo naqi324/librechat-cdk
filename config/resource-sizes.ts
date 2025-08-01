@@ -52,6 +52,10 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
       allocatedStorage: 20,
       multiAz: false,
     },
+    documentdb: {
+      instanceClass: 'db.t3.medium', // Minimum supported for DocumentDB
+      instanceCount: 1,
+    },
     estimatedMonthlyCost: 50,
   },
 
@@ -186,6 +190,10 @@ export const RESOURCE_SIZES: Record<ResourceSizeKey, ResourceSize> = {
       instanceClass: 'db.t3.micro',
       allocatedStorage: 20,
       multiAz: false,
+    },
+    documentdb: {
+      instanceClass: 'db.t3.medium', // Minimum supported for DocumentDB
+      instanceCount: 1,
     },
     estimatedMonthlyCost: 40,
   },

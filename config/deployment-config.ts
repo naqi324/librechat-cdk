@@ -5,15 +5,15 @@ import { getResourceSizeFromEnv, ResourceSize } from './resource-sizes';
 // Environment-specific configurations
 export const environmentConfigs = {
   development: {
-    deploymentMode: 'EC2' as const,
+    deploymentMode: 'ECS' as const,
     vpcConfig: {
       useExisting: false,
       cidr: '10.0.0.0/16',
       maxAzs: 2,
-      natGateways: 0, // Cost savings for dev
+      natGateways: 1, // Required for Lambda functions in private subnets
     },
     databaseConfig: {
-      engine: 'postgres' as const, // Removed DocumentDB to avoid Lambda connectivity issues
+      engine: 'postgres-and-documentdb' as const, // LibreChat requires MongoDB connection
       instanceClass: 'db.t3.small',
       allocatedStorage: 20,
       backupRetentionDays: 1,

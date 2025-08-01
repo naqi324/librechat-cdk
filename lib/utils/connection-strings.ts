@@ -25,7 +25,7 @@ export function buildDocumentDBConnectionString(options: DocumentDBConnectionOpt
     port = 27017,
     database,
     directConnection = false,
-    tlsCAFile = '/opt/rds-ca-2019-root.pem',
+    tlsCAFile = '/opt/librechat/rds-ca-2019-root.pem',
   } = options;
 
   // Escape username and password for URL
@@ -72,5 +72,5 @@ export function buildDocumentDBConnectionTemplate(host: string, port: number = 2
  * Build connection string template for ECS with environment variables
  */
 export function buildDocumentDBConnectionTemplateECS(host: string, port: number = 27017): string {
-  return `mongodb://\${MONGO_USER}:\${MONGO_PASSWORD}@${host}:${port}/?tls=true&tlsCAFile=/opt/rds-ca-2019-root.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
+  return `mongodb://\${MONGO_USER}:\${MONGO_PASSWORD}@${host}:${port}/?tls=true&tlsCAFile=/opt/librechat/rds-ca-2019-root.pem&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
 }
