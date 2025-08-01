@@ -269,8 +269,10 @@ export class DatabaseConstruct extends Construct {
           DB_PORT: '5432',
           DB_NAME: 'librechat',
           DB_SECRET_ID: this.secrets['postgres'].secretArn,
+          MAX_RETRIES: '30', // Reduced from 90 for faster deployment
+          RETRY_DELAY: '5',  // Reduced from 10 seconds
         },
-        timeout: cdk.Duration.minutes(15), // Increased from 5 to 15 minutes
+        timeout: cdk.Duration.minutes(10), // Reduced from 15 to 10 minutes for faster failures
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
       });
@@ -339,11 +341,11 @@ export class DatabaseConstruct extends Construct {
           DB_HOST: this.endpoints['documentdb'],
           DB_PORT: '27017',
           DB_NAME: 'librechat',
-          // Increased retries for DocumentDB availability
-          MAX_RETRIES: '60', // 60 attempts
-          RETRY_DELAY: '10', // 10 seconds between attempts = 10 minutes max
+          // Reduced retries for faster deployment
+          MAX_RETRIES: '20', // 20 attempts (reduced from 60)
+          RETRY_DELAY: '5', // 5 seconds between attempts = ~2 minutes max
         },
-        timeout: cdk.Duration.minutes(15), // Maximum Lambda timeout
+        timeout: cdk.Duration.minutes(10), // Reduced from 15 minutes
         memorySize: 256,
         logRetention: logs.RetentionDays.ONE_WEEK,
         layers: [

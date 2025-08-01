@@ -116,6 +116,36 @@ if [ "$SKIP_WIZARD" = true ] && [ -n "$CONFIG_FILE" ]; then
 fi
 echo
 
+# Track deployment start time
+DEPLOYMENT_START_TIME=$(date +%s)
+
+# Function to check token expiration
+check_token_expiration() {
+    local start_time=$1
+    local current_time=$(date +%s)
+    local elapsed=$((current_time - start_time))
+    local remaining=$((7200 - elapsed))  # 2 hours = 7200 seconds
+    
+    if [ $remaining -lt 1800 ]; then  # Less than 30 minutes remaining
+        echo -e "${YELLOW}⚠️  WARNING: Only $((remaining/60)) minutes remaining on Isengard token!${NC}"
+        echo -e "${YELLOW}Consider using AWS CloudShell or refreshing credentials.${NC}"
+        echo -e "${YELLOW}See ISENGARD_TOKEN_WORKAROUNDS.md for alternatives.${NC}"
+        read -p "Continue deployment? (y/n): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+}
+
+# Function to format time duration
+format_duration() {
+    local seconds=$1
+    local minutes=$((seconds / 60))
+    local remaining_seconds=$((seconds % 60))
+    echo "${minutes}m ${remaining_seconds}s"
+}
+
 # Function to print colored output
 print_status() {
     echo -e "${GREEN}✅ $1${NC}"
@@ -714,6 +744,12 @@ echo "2. Bootstrap CDK (prepare AWS account)"
 echo "3. Deploy the LibreChat stack"
 echo
 echo "This process takes approximately 15-20 minutes."
+echo -e "${YELLOW}⏱️  Estimated deployment time:${NC}"
+echo "  - Ultra-minimal config: 60-80 minutes"
+echo "  - Standard config: 90-120 minutes"
+echo "  - With DocumentDB: 120+ minutes"
+echo -e "${YELLOW}🔑 Isengard token expires in ~2 hours from SSO login${NC}"
+check_token_expiration $DEPLOYMENT_START_TIME
 echo
 read -p "Deploy now? (y/n) [y]: " deploy_now
 deploy_now="${deploy_now:-y}"
@@ -746,6 +782,11 @@ if [ "$deploy_now" = "y" ]; then
     # Deploy
     echo -e "\n${BLUE}🚀 Deploying Stack${NC}"
     echo "=================="
+    echo -e "${CYAN}🕐 Deployment started at: $(date)${NC}"
+    echo -e "${CYAN}⏱️  Time elapsed: $(format_duration $(($(date +%s) - DEPLOYMENT_START_TIME)))${NC}"
+    
+    # Check token expiration before main deployment
+    check_token_expiration $DEPLOYMENT_START_TIME
     
     if [ "$FAST_MODE" = true ]; then
         echo -e "${CYAN}Using fast deployment mode...${NC}"
@@ -780,11 +821,19 @@ if [ "$deploy_now" = "y" ]; then
         fi
     fi
     
+    # Calculate and display total deployment time
+    DEPLOYMENT_END_TIME=$(date +%s)
+    TOTAL_TIME=$((DEPLOYMENT_END_TIME - DEPLOYMENT_START_TIME))
+    
     echo -e "\n${GREEN}✨ Deployment Complete!${NC}"
+    echo -e "${GREEN}⏱️  Total deployment time: $(format_duration $TOTAL_TIME)${NC}"
     echo "======================="
     echo
     echo "Your LibreChat instance is being set up. Check the AWS CloudFormation"
     echo "console for detailed progress and outputs."
+    echo
+    echo "${CYAN}💡 TIP: For deployments over 90 minutes, use AWS CloudShell to avoid token expiration.${NC}"
+    echo "${CYAN}   See ISENGARD_TOKEN_WORKAROUNDS.md for details.${NC}"
     echo
     echo "Once complete, you'll find:"
     echo "  - Application URL"

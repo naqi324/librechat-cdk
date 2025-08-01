@@ -5,15 +5,15 @@ import { getResourceSizeFromEnv, ResourceSize } from './resource-sizes';
 // Environment-specific configurations
 export const environmentConfigs = {
   development: {
-    deploymentMode: 'ECS' as const,
+    deploymentMode: 'EC2' as const,
     vpcConfig: {
       useExisting: false,
       cidr: '10.0.0.0/16',
       maxAzs: 2,
-      natGateways: 1, // Required for Lambda functions in private subnets
+      natGateways: 0, // Cost savings for dev
     },
     databaseConfig: {
-      engine: 'postgres-and-documentdb' as const, // LibreChat requires MongoDB connection
+      engine: 'postgres' as const, // Removed DocumentDB to avoid Lambda connectivity issues
       instanceClass: 'db.t3.small',
       allocatedStorage: 20,
       backupRetentionDays: 1,
@@ -316,6 +316,32 @@ export const presetConfigs = {
       sharePoint: true,
     })
     .withEnhancedMonitoring(true),
+
+  // Ultra-minimal development setup - fastest deployment for Isengard token constraints
+  'ultra-minimal-dev': new DeploymentConfigBuilder('development')
+    .withDeploymentMode('EC2') // EC2 is faster than ECS
+    .withFeatures({ 
+      rag: false, 
+      meilisearch: false,
+      sharePoint: false 
+    })
+    .withVpc({
+      useExisting: false,
+      cidr: '10.0.0.0/16',
+      maxAzs: 1, // Single AZ for speed
+      natGateways: 1, // Required for Lambda functions
+    })
+    .withDatabase({
+      engine: 'postgres' as const, // PostgreSQL only - no DocumentDB
+      instanceClass: 'db.t3.micro',
+      allocatedStorage: 20,
+      backupRetentionDays: 1,
+    })
+    .withCompute({ 
+      instanceType: 't3.small' // Smaller instance for faster provisioning
+    })
+    .withResourceSize('xs') // Ensure xs sizing
+    .withEnhancedMonitoring(false), // Disable monitoring for speed
 };
 
 // Export helper function to get config from environment

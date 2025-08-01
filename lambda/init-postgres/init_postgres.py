@@ -30,7 +30,12 @@ def get_db_credentials(secret_id):
             raise Exception(f"Failed to retrieve secret {secret_id}: {str(e)}")
 
 
-def wait_for_db(host, port, user, password, max_retries=90, retry_delay=10):
+def wait_for_db(host, port, user, password, max_retries=None, retry_delay=None):
+    # Get retry configuration from environment or use defaults
+    if max_retries is None:
+        max_retries = int(os.environ.get('MAX_RETRIES', '30'))  # Reduced from 90
+    if retry_delay is None:
+        retry_delay = int(os.environ.get('RETRY_DELAY', '5'))   # Reduced from 10
     """Wait for database to become available"""
     logger.info(f"Waiting for database at {host}:{port} with max retries: {max_retries}")
     logger.info(f"Using user: {user}")
