@@ -8,6 +8,8 @@ import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cr from 'aws-cdk-lib/custom-resources';
+import * as kms from 'aws-cdk-lib/aws-kms';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 export interface DatabaseConstructProps {
@@ -54,6 +56,20 @@ export class DatabaseConstruct extends Construct {
   }
 
   private createAuroraPostgres(props: DatabaseConstructProps): void {
+    // Create KMS key for database encryption
+    const dbEncryptionKey = new kms.Key(this, 'PostgresEncryptionKey', {
+      description: `LibreChat PostgreSQL encryption key - ${props.environment}`,
+      enableKeyRotation: true,
+      alias: `alias/librechat-postgres-${props.environment}`,
+      removalPolicy: props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+      pendingWindow: cdk.Duration.days(30),
+    });
+
+    // Grant RDS service access to the key
+    dbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
@@ -118,6 +134,7 @@ export class DatabaseConstruct extends Construct {
       preferredMaintenanceWindow: 'sun:04:00-sun:05:00',
       deletionProtection: props.environment === 'production',
       storageEncrypted: true,
+      storageEncryptionKey: dbEncryptionKey,
       cloudwatchLogsExports: ['postgresql'],
       cloudwatchLogsRetention: logs.RetentionDays.ONE_MONTH,
       defaultDatabaseName: 'librechat',
@@ -133,6 +150,20 @@ export class DatabaseConstruct extends Construct {
   }
 
   private createRdsPostgres(props: DatabaseConstructProps): void {
+    // Create KMS key for database encryption
+    const dbEncryptionKey = new kms.Key(this, 'PostgresEncryptionKey', {
+      description: `LibreChat PostgreSQL encryption key - ${props.environment}`,
+      enableKeyRotation: true,
+      alias: `alias/librechat-postgres-${props.environment}`,
+      removalPolicy: props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+      pendingWindow: cdk.Duration.days(30),
+    });
+
+    // Grant RDS service access to the key
+    dbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
@@ -171,6 +202,7 @@ export class DatabaseConstruct extends Construct {
       allocatedStorage: props.allocatedStorage || 20,
       storageType: rds.StorageType.GP3,
       storageEncrypted: true,
+      storageEncryptionKey: dbEncryptionKey,
       backupRetention: cdk.Duration.days(props.backupRetentionDays || 1),
       deleteAutomatedBackups: props.environment !== 'production',
       deletionProtection: props.environment === 'production',
@@ -192,6 +224,20 @@ export class DatabaseConstruct extends Construct {
   }
 
   private createDocumentDb(props: DatabaseConstructProps): void {
+    // Create KMS key for DocumentDB encryption
+    const docdbEncryptionKey = new kms.Key(this, 'DocumentDbEncryptionKey', {
+      description: `LibreChat DocumentDB encryption key - ${props.environment}`,
+      enableKeyRotation: true,
+      alias: `alias/librechat-docdb-${props.environment}`,
+      removalPolicy: props.environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+      pendingWindow: cdk.Duration.days(30),
+    });
+
+    // Grant DocumentDB service access to the key
+    docdbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'DocumentDbSecurityGroup', {
       vpc: props.vpc,
@@ -217,6 +263,7 @@ export class DatabaseConstruct extends Construct {
       },
       deletionProtection: props.environment === 'production',
       storageEncrypted: true,
+      kmsKey: docdbEncryptionKey,
       removalPolicy:
         props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       cloudWatchLogsRetention: logs.RetentionDays.ONE_MONTH,

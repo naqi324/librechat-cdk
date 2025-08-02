@@ -4,10 +4,10 @@
 
 ```md
 librechat-cdk/
-├── setup.sh                          # Main setup and deployment script
-├── README.md                         # Main documentation (setup, deployment, operations)
-├── DEPLOYMENT_GUIDE.md               # Detailed deployment instructions
-├── PROJECT_STRUCTURE.md              # This file - explains project organization
+├── README.md                         # Main documentation - concise overview
+├── QUICK_REFERENCE.md               # Commands and tips cheatsheet
+├── PROJECT_STRUCTURE.md              # This file - repository organization
+├── CLAUDE.md                         # Instructions for Claude Code AI assistant
 ├── package.json                      # Node.js dependencies and npm scripts
 ├── package-lock.json                 # (Generated) Locked dependency versions
 ├── tsconfig.json                      # TypeScript compiler configuration
@@ -49,7 +49,15 @@ librechat-cdk/
 │       ├── init_docdb.py             # DocumentDB initialization
 │       └── requirements.txt          # Python dependencies
 │
-├── docs/                             # Additional documentation
+├── docs/                             # All detailed documentation
+│   ├── README.md                     # Documentation index and navigation
+│   ├── AWS_AUTHENTICATION.md         # AWS credentials and permissions setup
+│   ├── LOCAL_TESTING_GUIDE.md        # Local development and testing
+│   ├── ISENGARD_TOKEN_WORKAROUNDS.md # Enterprise AWS token solutions
+│   ├── CLEANUP.md                    # Resource cleanup guide
+│   ├── DEPLOYMENT_OPTIMIZATION.md    # Cost and performance optimization
+│   ├── DOCUMENTDB_SETUP.md          # DocumentDB configuration guide
+│   ├── NETWORK_ARCHITECTURE.md      # VPC and networking details
 │   ├── SECURITY.md                   # Security best practices and features
 │   └── TROUBLESHOOTING.md           # Common issues and solutions
 │
@@ -57,11 +65,16 @@ librechat-cdk/
 │   └── librechat-stack.test.ts       # Unit tests for CDK stack
 │
 ├── scripts/                          # Utility scripts for deployment
-│   ├── README.md                     # Scripts documentation
-│   ├── cleanup.sh                    # Remove all AWS resources
-│   ├── deploy.sh                     # CI/CD deployment script
+│   ├── README-cleanup.md             # Cleanup scripts documentation
+│   ├── analyze-deployment.sh         # Analyze deployment state
+│   ├── check-resources.sh            # Check for remaining resources
+│   ├── cleanup.sh                    # Consolidated cleanup script (v2.0.0)
 │   ├── create-one-click-deploy.sh    # Generate CloudFormation template
-│   └── estimate-cost.ts              # TypeScript cost estimation tool
+│   ├── create-support-bundle.sh      # Generate diagnostic information
+│   ├── deploy-interactive.sh         # Interactive deployment wizard
+│   ├── deploy.sh                     # CI/CD deployment script
+│   ├── estimate-cost.ts              # TypeScript cost estimation tool
+│   └── setup-environment.sh          # Initial environment setup wizard
 │
 └── cdk.out/                          # (Generated) CDK synthesis output
     └── LibreChatStack.template.json  # Generated CloudFormation template
@@ -122,6 +135,35 @@ Key features:
 - Custom metrics and alarms
 - SNS notifications
 - Log aggregation
+
+##### `security/audit-construct.ts`
+- CloudTrail audit logging
+- S3 bucket for audit logs
+- KMS encryption for logs
+- Data event tracking for S3 and Lambda
+- Compliance-ready configuration
+
+#### `lib/utils/` - Utility Functions
+
+##### `connection-strings.ts`
+- PostgreSQL connection string builder
+- DocumentDB connection string builder
+- Handles SSL/TLS parameters
+- Environment-specific configurations
+
+##### `iam-policies.ts`
+- Least-privilege policy generators
+- Bedrock access policies
+- S3 bucket policies
+- Secrets Manager policies
+- Consistent security patterns
+
+##### `tagging-strategy.ts`
+- Comprehensive tagging framework
+- Standard tags (Environment, Project, etc.)
+- Compliance tags (HIPAA, SOC2)
+- Cost allocation tags
+- Automated tag application
 
 #### `config/deployment-config.ts`
 
@@ -202,17 +244,38 @@ TypeScript configuration:
 
 #### `.gitignore`
 
+Key patterns for keeping the repository clean:
+
 ```
+# TypeScript compilation outputs
 *.js
-!jest.config.js
 *.d.ts
+*.js.map
+*.d.ts.map
+!jest.config.js
+!.eslintrc.js
+
+# Node.js
 node_modules/
-.npm/
-.env
+
+# CDK outputs
 cdk.out/
-.cdk.staging/
+cdk.context.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.librechat.example
+
+# Claude Code
+claude-instance*/
+claude-code-storage/
+settings.local.json
+
+# AWS credentials
 *.pem
-cloudformation-template.yaml
+*.ppk
 ```
 
 ### Deployment Scripts

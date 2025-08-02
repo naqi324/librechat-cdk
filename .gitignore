@@ -62,6 +62,7 @@ claude-instance/
 claude-instance-1/
 claude-instance-2/
 commands/
+hooks/
 .reports/
 
 # OS

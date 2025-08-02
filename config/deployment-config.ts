@@ -28,6 +28,15 @@ export const environmentConfigs = {
     enableMeilisearch: false,
     enableSharePoint: false,
     enableEnhancedMonitoring: false,
+    enableAuditLogging: true,
+    enableHipaaCompliance: false,
+    tagConfig: {
+      owner: 'DevOps',
+      costCenter: 'Engineering',
+      project: 'LibreChat-Dev',
+      dataClassification: 'Internal',
+      compliance: 'None',
+    },
   },
 
   staging: {
@@ -54,6 +63,15 @@ export const environmentConfigs = {
     enableMeilisearch: true,
     enableSharePoint: false,
     enableEnhancedMonitoring: true,
+    enableAuditLogging: true,
+    enableHipaaCompliance: false,
+    tagConfig: {
+      owner: 'DevOps',
+      costCenter: 'Engineering',
+      project: 'LibreChat',
+      dataClassification: 'Confidential',
+      compliance: 'SOC2',
+    },
   },
 
   production: {
@@ -88,6 +106,8 @@ export const defaultConfig: Partial<LibreChatStackProps> = {
   environment: 'development',
   deploymentMode: 'EC2',
   allowedIps: ['0.0.0.0/0'],
+  enableAuditLogging: true,
+  enableHipaaCompliance: false,
 };
 
 // Configuration builder

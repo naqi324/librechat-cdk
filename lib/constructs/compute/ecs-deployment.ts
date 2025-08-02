@@ -2,7 +2,6 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53_targets from 'aws-cdk-lib/aws-route53-targets';
@@ -12,6 +11,7 @@ import { Construct } from 'constructs';
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
 import { buildDocumentDBConnectionTemplateECS } from '../../utils/connection-strings';
+import { createBedrockPolicyStatements } from '../../utils/iam-policies';
 
 export interface ECSDeploymentProps {
   vpc: ec2.IVpc;
@@ -184,13 +184,18 @@ export class ECSDeployment extends Construct {
       props.database.secrets['postgres'].grantRead(taskDefinition.taskRole);
     }
 
-    // Grant Bedrock access
-    taskDefinition.taskRole.addToPrincipalPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-        resources: ['*'],
-      })
+    // Grant Bedrock access using utility function
+    const bedrockStatements = createBedrockPolicyStatements({
+      region: cdk.Stack.of(this).region,
+      modelFamilies: [
+        'anthropic.claude-*',
+        'amazon.titan-*',
+        'meta.llama*',
+        'mistral.*'
+      ],
+    });
+    bedrockStatements.forEach(statement => 
+      taskDefinition.taskRole.addToPrincipalPolicy(statement)
     );
 
     const container = taskDefinition.addContainer('rag-api', {
@@ -275,18 +280,18 @@ export class ECSDeployment extends Construct {
     }
     props.appSecrets.grantRead(taskDefinition.taskRole);
 
-    // Grant Bedrock access
-    taskDefinition.taskRole.addToPrincipalPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          'bedrock:InvokeModel',
-          'bedrock:InvokeModelWithResponseStream',
-          'bedrock:ListFoundationModels',
-          'bedrock:GetFoundationModel',
-        ],
-        resources: ['*'],
-      })
+    // Grant Bedrock access using utility function
+    const bedrockStatements = createBedrockPolicyStatements({
+      region: cdk.Stack.of(this).region,
+      modelFamilies: [
+        'anthropic.claude-*',
+        'amazon.titan-*',
+        'meta.llama*',
+        'mistral.*'
+      ],
+    });
+    bedrockStatements.forEach(statement => 
+      taskDefinition.taskRole.addToPrincipalPolicy(statement)
     );
 
     // Build environment variables

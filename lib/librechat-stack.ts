@@ -14,6 +14,8 @@ import { EC2Deployment } from './constructs/compute/ec2-deployment';
 import { ECSDeployment } from './constructs/compute/ecs-deployment';
 import { StorageConstruct } from './constructs/storage/storage-construct';
 import { MonitoringConstruct } from './constructs/monitoring/monitoring-construct';
+import { AuditConstruct } from './constructs/security/audit-construct';
+import { TaggingStrategy, StandardTags } from './utils/tagging-strategy';
 
 export interface LibreChatStackProps extends cdk.StackProps {
   // Deployment Configuration
@@ -64,6 +66,18 @@ export interface LibreChatStackProps extends cdk.StackProps {
   // Security
   allowedIps?: string[];
   keyPairName?: string;
+  enableAuditLogging?: boolean;
+  enableHipaaCompliance?: boolean;
+
+  // Tagging Configuration
+  tagConfig?: {
+    owner?: string;
+    costCenter?: string;
+    project?: string;
+    dataClassification?: string;
+    compliance?: string;
+    customTags?: { [key: string]: string };
+  };
 }
 
 export class LibreChatStack extends cdk.Stack {
@@ -76,6 +90,31 @@ export class LibreChatStack extends cdk.Stack {
 
     // Validate required properties
     this.validateProps(props);
+
+    // Initialize tagging strategy
+    const standardTags: StandardTags = {
+      Application: 'LibreChat',
+      Environment: props.environment,
+      Owner: props.tagConfig?.owner || 'DevOps',
+      CostCenter: props.tagConfig?.costCenter || 'AI-Platform',
+      Project: props.tagConfig?.project || 'LibreChat-CDK',
+      DataClassification: props.tagConfig?.dataClassification || 'Confidential',
+      Compliance: props.tagConfig?.compliance || (props.enableHipaaCompliance ? 'HIPAA' : 'None'),
+      ManagedBy: 'CDK',
+      DeploymentMode: props.deploymentMode,
+      Version: require('../package.json').version || '1.0.0',
+      BackupPolicy: props.environment === 'production' ? 'Daily' : 'Weekly',
+      SecurityLevel: props.environment === 'production' ? 'High' : 'Medium',
+    };
+
+    const taggingStrategy = new TaggingStrategy(this.stackName, {
+      standardTags,
+      customTags: props.tagConfig?.customTags,
+      enableAutomaticTags: true,
+    });
+
+    // Apply tags to the stack itself
+    taggingStrategy.applyTags(this);
 
     // Create or import VPC
     const vpcConstructProps: any = {
@@ -92,6 +131,17 @@ export class LibreChatStack extends cdk.Stack {
 
     const vpcConstruct = new VpcConstruct(this, 'Network', vpcConstructProps);
     this.vpc = vpcConstruct.vpc;
+    taggingStrategy.applyResourceSpecificTags(vpcConstruct, 'Network');
+
+    // Create security audit logging
+    if (props.enableAuditLogging !== false) { // Enable by default
+      const auditConstruct = new AuditConstruct(this, 'Audit', {
+        environment: props.environment,
+        enableHipaaCompliance: props.enableHipaaCompliance || false,
+        enableDataEvents: props.environment === 'production' || props.enableHipaaCompliance,
+      });
+      taggingStrategy.applyResourceSpecificTags(auditConstruct, 'Security');
+    }
 
     // Create storage resources
     const storage = new StorageConstruct(this, 'Storage', {
@@ -99,6 +149,7 @@ export class LibreChatStack extends cdk.Stack {
       enableEfs: props.deploymentMode === 'ECS',
       vpc: this.vpc,
     });
+    taggingStrategy.applyResourceSpecificTags(storage, 'Storage');
 
     // Create database resources
     const database = new DatabaseConstruct(this, 'Database', {
@@ -113,6 +164,7 @@ export class LibreChatStack extends cdk.Stack {
       environment: props.environment,
     });
     this.databaseEndpoints = database.endpoints;
+    taggingStrategy.applyResourceSpecificTags(database, 'Database');
 
     // Create secrets for application
     const appSecrets = this.createApplicationSecrets(props);
@@ -139,12 +191,14 @@ export class LibreChatStack extends cdk.Stack {
       }
 
       deployment = new EC2Deployment(this, 'EC2Deployment', ec2Props);
+      taggingStrategy.applyResourceSpecificTags(deployment, 'Compute');
     } else {
       // Create ECS cluster
       const cluster = new ecs.Cluster(this, 'ECSCluster', {
         vpc: this.vpc,
         containerInsights: props.environment === 'production',
       });
+      taggingStrategy.applyResourceSpecificTags(cluster, 'Compute');
 
       // Add service discovery namespace
       cluster.addDefaultCloudMapNamespace({
@@ -171,6 +225,7 @@ export class LibreChatStack extends cdk.Stack {
       }
 
       deployment = new ECSDeployment(this, 'ECSDeployment', ecsProps);
+      taggingStrategy.applyResourceSpecificTags(deployment, 'Compute');
     }
 
     this.loadBalancerUrl = deployment.loadBalancerUrl;
@@ -188,14 +243,18 @@ export class LibreChatStack extends cdk.Stack {
         monitoringProps.alertEmail = props.alertEmail;
       }
 
-      new MonitoringConstruct(this, 'Monitoring', monitoringProps);
+      const monitoring = new MonitoringConstruct(this, 'Monitoring', monitoringProps);
+      taggingStrategy.applyResourceSpecificTags(monitoring, 'Monitoring');
     }
 
     // Create outputs
     this.createOutputs(deployment, database);
 
-    // Apply tags
-    this.applyTags(props);
+    // Add cost allocation tags to CloudFormation outputs
+    new cdk.CfnOutput(this, 'CostAllocationTags', {
+      value: JSON.stringify(taggingStrategy.getCostAllocationTags()),
+      description: 'Tags that should be activated for cost allocation in AWS Billing',
+    });
   }
 
   private validateProps(props: LibreChatStackProps): void {
@@ -397,11 +456,4 @@ def handler(event, context):
     });
   }
 
-  private applyTags(props: LibreChatStackProps): void {
-    cdk.Tags.of(this).add('Application', 'LibreChat');
-    cdk.Tags.of(this).add('Environment', props.environment);
-    cdk.Tags.of(this).add('DeploymentMode', props.deploymentMode);
-    cdk.Tags.of(this).add('ManagedBy', 'CDK');
-    cdk.Tags.of(this).add('CostCenter', 'AI-Platform');
-  }
 }

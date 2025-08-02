@@ -1,5 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 export interface VpcConstructProps {
@@ -49,10 +51,8 @@ export class VpcConstruct extends Construct {
       // Add VPC endpoints for AWS services to reduce costs and improve security
       this.addVpcEndpoints(vpc, props.environment);
 
-      // Add flow logs for production environments
-      if (props.environment === 'production') {
-        this.addFlowLogs(vpc);
-      }
+      // Add flow logs for all environments (security best practice)
+      this.addFlowLogs(vpc, props.environment);
 
       // Tag subnets for better identification
       this.tagSubnets();
@@ -161,12 +161,40 @@ export class VpcConstruct extends Construct {
     }
   }
 
-  private addFlowLogs(vpc: ec2.Vpc): void {
+  private addFlowLogs(vpc: ec2.Vpc, environment: string): void {
+    // Create a log group with appropriate retention
+    const logGroup = new logs.LogGroup(this, 'VPCFlowLogGroup', {
+      logGroupName: `/aws/vpc/flowlogs/${cdk.Stack.of(this).stackName}`,
+      retention: environment === 'production' 
+        ? logs.RetentionDays.ONE_YEAR 
+        : logs.RetentionDays.ONE_MONTH,
+      removalPolicy: environment === 'production' 
+        ? cdk.RemovalPolicy.RETAIN 
+        : cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Create IAM role for VPC Flow Logs
+    const flowLogRole = new iam.Role(this, 'VPCFlowLogRole', {
+      assumedBy: new iam.ServicePrincipal('vpc-flow-logs.amazonaws.com'),
+      description: 'Role for VPC Flow Logs to write to CloudWatch',
+    });
+
+    // Grant permissions to write logs
+    logGroup.grantWrite(flowLogRole);
+
+    // Create flow log with enhanced configuration
     new ec2.FlowLog(this, 'VPCFlowLog', {
       resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
-      destination: ec2.FlowLogDestination.toCloudWatchLogs(),
+      destination: ec2.FlowLogDestination.toCloudWatchLogs(logGroup, flowLogRole),
       trafficType: ec2.FlowLogTrafficType.ALL,
+      maxAggregationInterval: ec2.FlowLogMaxAggregationInterval.ONE_MINUTE,
+      // Use custom log format for comprehensive logging
+      logFormat: undefined, // Will use default AWS format which includes all necessary fields
     });
+
+    // Add tags for compliance
+    cdk.Tags.of(logGroup).add('Purpose', 'VPC-Flow-Logs');
+    cdk.Tags.of(logGroup).add('Compliance', 'Security-Monitoring');
   }
 
   private tagSubnets(): void {

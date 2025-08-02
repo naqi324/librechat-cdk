@@ -12,6 +12,11 @@ import { Construct } from 'constructs';
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
 import { buildDocumentDBConnectionTemplate } from '../../utils/connection-strings';
+import { 
+  createBedrockPolicyStatements, 
+  createS3PolicyStatements, 
+  createSecretsManagerPolicyStatements 
+} from '../../utils/iam-policies';
 
 export interface EC2DeploymentProps {
   vpc: ec2.IVpc;
@@ -156,49 +161,36 @@ export class EC2Deployment extends Construct {
       ],
     });
 
-    // Add S3 permissions
-    role.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
-        resources: [props.storage.s3Bucket.bucketArn, `${props.storage.s3Bucket.bucketArn}/*`],
-      })
-    );
+    // Add S3 permissions using utility function
+    const s3Statements = createS3PolicyStatements({
+      bucketArn: props.storage.s3Bucket.bucketArn,
+      allowDelete: true, // LibreChat needs to manage uploaded files
+      requireEncryption: true,
+    });
+    s3Statements.forEach(statement => role.addToPolicy(statement));
 
-    // Add Bedrock permissions with least privilege
-    role.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
-        resources: [
-          `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/anthropic.claude-*`,
-          `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/amazon.titan-*`,
-          `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/meta.llama*`,
-          `arn:aws:bedrock:${cdk.Stack.of(this).region}::foundation-model/mistral.*`,
-        ],
-      })
-    );
+    // Add Bedrock permissions using utility function
+    const bedrockStatements = createBedrockPolicyStatements({
+      region: cdk.Stack.of(this).region,
+      modelFamilies: [
+        'anthropic.claude-*',
+        'amazon.titan-*',
+        'meta.llama*',
+        'mistral.*'
+      ],
+    });
+    bedrockStatements.forEach(statement => role.addToPolicy(statement));
 
-    // Add separate permission for listing models
-    role.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['bedrock:ListFoundationModels', 'bedrock:GetFoundationModel'],
-        resources: ['*'], // These actions require wildcard
-      })
-    );
-
-    // Add Secrets Manager permissions
-    role.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'],
-        resources: [
-          props.appSecrets.secretArn,
-          ...Object.values(props.database.secrets).map((secret) => secret.secretArn),
-        ],
-      })
-    );
+    // Add Secrets Manager permissions using utility function
+    const secretArns = [
+      props.appSecrets.secretArn,
+      ...Object.values(props.database.secrets).map((secret) => secret.secretArn),
+    ];
+    const secretsStatements = createSecretsManagerPolicyStatements({
+      secretArns,
+      allowUpdate: false, // Read-only access
+    });
+    secretsStatements.forEach(statement => role.addToPolicy(statement));
 
     // Add CloudWatch Logs permissions with least privilege
     role.addToPolicy(
