@@ -123,6 +123,9 @@ export class EC2Deployment extends Construct {
     // Allow DNS resolution
     sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(53), 'Allow DNS resolution');
 
+    // Allow outbound PostgreSQL traffic for RAG API
+    sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5432), 'Allow PostgreSQL outbound for containers');
+
     // Allow SSH from specified IPs
     props.allowedIps.forEach((ip) => {
       sg.addIngressRule(ec2.Peer.ipv4(ip), ec2.Port.tcp(22), `Allow SSH from ${ip}`);
@@ -232,6 +235,10 @@ export class EC2Deployment extends Construct {
       // Create app directory
       'mkdir -p /opt/librechat',
       'cd /opt/librechat',
+      
+      // Create required directories for container volumes
+      'mkdir -p logs uploads',
+      'chmod 777 logs uploads',
 
       // Download RDS certificate for SSL connection
       'wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-2019-root.pem',
@@ -242,6 +249,10 @@ export class EC2Deployment extends Construct {
       props.database.secrets['documentdb']
         ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json`
         : 'echo "{}" > /tmp/docdb-secrets.json',
+
+      // Extract database credentials for docker-compose
+      'DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
+      'DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
 
       // Create environment file
       'cat > .env << EOL',
@@ -316,8 +327,8 @@ export class EC2Deployment extends Construct {
       '    env_file: .env',
       '    environment:',
       '      - POSTGRES_DB=librechat',
-      '      - POSTGRES_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
-      '      - POSTGRES_PASSWORD=$(cat /tmp/db-secrets.json | jq -r .password)',
+      '      - POSTGRES_USER=${DB_USER}',
+      '      - POSTGRES_PASSWORD=${DB_PASS}',
       `      - DB_HOST=${props.database.endpoints['postgres']}`,
       '      - DB_PORT=5432',
       '    ports:',
