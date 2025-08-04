@@ -26,14 +26,14 @@ export class AuditConstruct extends Construct {
       enableKeyRotation: true,
       description: `LibreChat Audit Encryption Key - ${props.environment}`,
       alias: `alias/librechat-audit-${props.environment}`,
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       pendingWindow: cdk.Duration.days(30),
     });
 
     // Grant CloudTrail service access to the key
-    this.encryptionKey.grant(new iam.ServicePrincipal('cloudtrail.amazonaws.com'), 
+    this.encryptionKey.grant(
+      new iam.ServicePrincipal('cloudtrail.amazonaws.com'),
       'kms:GenerateDataKey',
       'kms:DescribeKey'
     );
@@ -45,16 +45,20 @@ export class AuditConstruct extends Construct {
       encryptionKey: this.encryptionKey,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       versioned: true,
-      lifecycleRules: [{
-        id: 'ArchiveOldLogs',
-        transitions: [{
-          storageClass: s3.StorageClass.GLACIER,
-          transitionAfter: cdk.Duration.days(90),
-        }],
-        expiration: props.enableHipaaCompliance 
-          ? cdk.Duration.days(2555) // 7 years for HIPAA
-          : cdk.Duration.days(props.auditRetentionDays || 365),
-      }],
+      lifecycleRules: [
+        {
+          id: 'ArchiveOldLogs',
+          transitions: [
+            {
+              storageClass: s3.StorageClass.GLACIER,
+              transitionAfter: cdk.Duration.days(90),
+            },
+          ],
+          expiration: props.enableHipaaCompliance
+            ? cdk.Duration.days(2555) // 7 years for HIPAA
+            : cdk.Duration.days(props.auditRetentionDays || 365),
+        },
+      ],
       serverAccessLogsPrefix: 'access-logs/',
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
@@ -62,13 +66,12 @@ export class AuditConstruct extends Construct {
     // Create CloudWatch log group for CloudTrail
     const logGroup = new logs.LogGroup(this, 'AuditLogGroup', {
       logGroupName: `/aws/cloudtrail/librechat-${props.environment}`,
-      retention: props.enableHipaaCompliance 
-        ? logs.RetentionDays.TWO_YEARS 
+      retention: props.enableHipaaCompliance
+        ? logs.RetentionDays.TWO_YEARS
         : logs.RetentionDays.ONE_YEAR,
       encryptionKey: this.encryptionKey,
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
     // Create IAM role for CloudTrail
@@ -78,14 +81,13 @@ export class AuditConstruct extends Construct {
     });
 
     // Grant CloudTrail permissions to write to CloudWatch Logs
-    cloudTrailRole.addToPolicy(new iam.PolicyStatement({
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'logs:CreateLogStream',
-        'logs:PutLogEvents',
-      ],
-      resources: [logGroup.logGroupArn],
-    }));
+    cloudTrailRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ['logs:CreateLogStream', 'logs:PutLogEvents'],
+        resources: [logGroup.logGroupArn],
+      })
+    );
 
     // CloudTrail with data events
     this.trail = new cloudtrail.Trail(this, 'AuditTrail', {
@@ -93,17 +95,14 @@ export class AuditConstruct extends Construct {
       encryptionKey: this.encryptionKey,
       sendToCloudWatchLogs: true,
       cloudWatchLogGroup: logGroup,
-      cloudWatchLogsRetention: props.enableHipaaCompliance 
-        ? logs.RetentionDays.TWO_YEARS 
+      cloudWatchLogsRetention: props.enableHipaaCompliance
+        ? logs.RetentionDays.TWO_YEARS
         : logs.RetentionDays.ONE_YEAR,
       includeGlobalServiceEvents: true,
       isMultiRegionTrail: true,
       enableFileValidation: true,
       trailName: `librechat-audit-trail-${props.environment}`,
-      insightTypes: [
-        cloudtrail.InsightType.API_CALL_RATE,
-        cloudtrail.InsightType.API_ERROR_RATE,
-      ],
+      insightTypes: [cloudtrail.InsightType.API_CALL_RATE, cloudtrail.InsightType.API_ERROR_RATE],
     });
 
     // Log S3 data events for HIPAA compliance

@@ -12,10 +12,10 @@ import { Construct } from 'constructs';
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
 import { buildDocumentDBConnectionTemplate } from '../../utils/connection-strings';
-import { 
-  createBedrockPolicyStatements, 
-  createS3PolicyStatements, 
-  createSecretsManagerPolicyStatements 
+import {
+  createBedrockPolicyStatements,
+  createS3PolicyStatements,
+  createSecretsManagerPolicyStatements,
 } from '../../utils/iam-policies';
 
 export interface EC2DeploymentProps {
@@ -167,19 +167,14 @@ export class EC2Deployment extends Construct {
       allowDelete: true, // LibreChat needs to manage uploaded files
       requireEncryption: true,
     });
-    s3Statements.forEach(statement => role.addToPolicy(statement));
+    s3Statements.forEach((statement) => role.addToPolicy(statement));
 
     // Add Bedrock permissions using utility function
     const bedrockStatements = createBedrockPolicyStatements({
       region: cdk.Stack.of(this).region,
-      modelFamilies: [
-        'anthropic.claude-*',
-        'amazon.titan-*',
-        'meta.llama*',
-        'mistral.*'
-      ],
+      modelFamilies: ['anthropic.claude-*', 'amazon.titan-*', 'meta.llama*', 'mistral.*'],
     });
-    bedrockStatements.forEach(statement => role.addToPolicy(statement));
+    bedrockStatements.forEach((statement) => role.addToPolicy(statement));
 
     // Add Secrets Manager permissions using utility function
     const secretArns = [
@@ -190,7 +185,7 @@ export class EC2Deployment extends Construct {
       secretArns,
       allowUpdate: false, // Read-only access
     });
-    secretsStatements.forEach(statement => role.addToPolicy(statement));
+    secretsStatements.forEach((statement) => role.addToPolicy(statement));
 
     // Add CloudWatch Logs permissions with least privilege
     role.addToPolicy(

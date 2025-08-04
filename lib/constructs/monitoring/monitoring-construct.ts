@@ -360,8 +360,8 @@ export class MonitoringConstruct extends Construct {
 
   private addApplicationMonitoring(props: MonitoringConstructProps): void {
     // ALB metrics
-    const deployment = props.deployment as any;
-    if (deployment.loadBalancer) {
+    const deployment = props.deployment;
+    if ('loadBalancer' in deployment && deployment.loadBalancer) {
       const requestCountMetric = new cloudwatch.Metric({
         namespace: 'AWS/ApplicationELB',
         metricName: 'RequestCount',

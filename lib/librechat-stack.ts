@@ -102,6 +102,7 @@ export class LibreChatStack extends cdk.Stack {
       Compliance: props.tagConfig?.compliance || (props.enableHipaaCompliance ? 'HIPAA' : 'None'),
       ManagedBy: 'CDK',
       DeploymentMode: props.deploymentMode,
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       Version: require('../package.json').version || '1.0.0',
       BackupPolicy: props.environment === 'production' ? 'Daily' : 'Weekly',
       SecurityLevel: props.environment === 'production' ? 'High' : 'Medium',
@@ -117,7 +118,14 @@ export class LibreChatStack extends cdk.Stack {
     taggingStrategy.applyTags(this);
 
     // Create or import VPC
-    const vpcConstructProps: any = {
+    const vpcConstructProps: {
+      useExisting: boolean;
+      cidr: string;
+      maxAzs: number;
+      natGateways: number;
+      environment: string;
+      existingVpcId?: string;
+    } = {
       useExisting: props.vpcConfig?.useExisting || false,
       cidr: props.vpcConfig?.cidr || '10.0.0.0/16',
       maxAzs: props.vpcConfig?.maxAzs || 2,
@@ -134,7 +142,8 @@ export class LibreChatStack extends cdk.Stack {
     taggingStrategy.applyResourceSpecificTags(vpcConstruct, 'Network');
 
     // Create security audit logging
-    if (props.enableAuditLogging !== false) { // Enable by default
+    if (props.enableAuditLogging !== false) {
+      // Enable by default
       const auditConstruct = new AuditConstruct(this, 'Audit', {
         environment: props.environment,
         enableHipaaCompliance: props.enableHipaaCompliance || false,
@@ -173,7 +182,19 @@ export class LibreChatStack extends cdk.Stack {
     let deployment: EC2Deployment | ECSDeployment;
 
     if (props.deploymentMode === 'EC2') {
-      const ec2Props: any = {
+      const ec2Props: {
+        vpc: ec2.IVpc;
+        instanceType: string;
+        keyPairName: string;
+        allowedIps: string[];
+        storage: StorageConstruct;
+        database: DatabaseConstruct;
+        appSecrets: secretsmanager.ISecret;
+        environment: string;
+        enableRag: boolean;
+        enableMeilisearch: boolean;
+        domainConfig?: LibreChatStackProps['domainConfig'];
+      } = {
         vpc: this.vpc,
         instanceType: props.computeConfig?.instanceType || 't3.xlarge',
         keyPairName: props.keyPairName!,
@@ -206,7 +227,20 @@ export class LibreChatStack extends cdk.Stack {
         vpc: this.vpc,
       });
 
-      const ecsProps: any = {
+      const ecsProps: {
+        vpc: ec2.IVpc;
+        cluster: ecs.Cluster;
+        cpu: number;
+        memory: number;
+        desiredCount: number;
+        storage: StorageConstruct;
+        database: DatabaseConstruct;
+        appSecrets: secretsmanager.ISecret;
+        environment: string;
+        enableRag: boolean;
+        enableMeilisearch: boolean;
+        domainConfig?: LibreChatStackProps['domainConfig'];
+      } = {
         vpc: this.vpc,
         cluster: cluster,
         cpu: props.computeConfig?.cpu || 2048,
@@ -232,7 +266,13 @@ export class LibreChatStack extends cdk.Stack {
 
     // Create monitoring resources
     if (props.alertEmail || props.enableEnhancedMonitoring) {
-      const monitoringProps: any = {
+      const monitoringProps: {
+        deployment: EC2Deployment | ECSDeployment;
+        database: DatabaseConstruct;
+        environment: string;
+        enableEnhancedMonitoring: boolean;
+        alertEmail?: string;
+      } = {
         deployment: deployment,
         database: database,
         environment: props.environment,
@@ -455,5 +495,4 @@ def handler(event, context):
       exportName: `${cdk.Stack.of(this).stackName}-VPCId`,
     });
   }
-
 }

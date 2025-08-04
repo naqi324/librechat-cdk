@@ -11,6 +11,7 @@ import {
 
 // Load environment variables from .env file if it exists
 try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   require('dotenv').config();
 } catch (e) {
   // dotenv is optional, ignore if not installed
@@ -60,7 +61,7 @@ switch (configSource) {
       .build();
     break;
 
-  case 'custom':
+  case 'custom': {
     // Build custom configuration from context
     const environment = app.node.tryGetContext('environment') || 'development';
     const builder = new DeploymentConfigBuilder(environment);
@@ -101,7 +102,7 @@ switch (configSource) {
     }
 
     // Features
-    const features: any = {};
+    const features: Record<string, boolean> = {};
     const enableRag = app.node.tryGetContext('enableRag');
     if (enableRag !== undefined) {
       features.rag = enableRag === 'true';
@@ -123,6 +124,7 @@ switch (configSource) {
 
     config = builder.build();
     break;
+  }
 
   case 'environment':
   default:

@@ -111,7 +111,7 @@ export class VpcConstruct extends Construct {
       service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
       privateDnsEnabled: true,
     });
-    
+
     // CloudWatch Logs endpoint for Lambda logging
     vpc.addInterfaceEndpoint('CloudWatchLogsEndpoint', {
       service: ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS,
@@ -143,7 +143,6 @@ export class VpcConstruct extends Construct {
         privateDnsEnabled: true,
       });
 
-
       // Bedrock endpoints for AI services
       vpc.addInterfaceEndpoint('BedrockEndpoint', {
         service: new ec2.InterfaceVpcEndpointService(
@@ -165,12 +164,10 @@ export class VpcConstruct extends Construct {
     // Create a log group with appropriate retention
     const logGroup = new logs.LogGroup(this, 'VPCFlowLogGroup', {
       logGroupName: `/aws/vpc/flowlogs/${cdk.Stack.of(this).stackName}`,
-      retention: environment === 'production' 
-        ? logs.RetentionDays.ONE_YEAR 
-        : logs.RetentionDays.ONE_MONTH,
-      removalPolicy: environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      retention:
+        environment === 'production' ? logs.RetentionDays.ONE_YEAR : logs.RetentionDays.ONE_MONTH,
+      removalPolicy:
+        environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
     // Create IAM role for VPC Flow Logs

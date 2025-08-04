@@ -19,8 +19,13 @@ export interface BedrockPolicyOptions {
 /**
  * Create least-privilege IAM policy statements for Bedrock access
  */
-export function createBedrockPolicyStatements(options: BedrockPolicyOptions): iam.PolicyStatement[] {
-  const { region, modelFamilies = ['anthropic.claude-*', 'amazon.titan-*', 'meta.llama*', 'mistral.*'] } = options;
+export function createBedrockPolicyStatements(
+  options: BedrockPolicyOptions
+): iam.PolicyStatement[] {
+  const {
+    region,
+    modelFamilies = ['anthropic.claude-*', 'amazon.titan-*', 'meta.llama*', 'mistral.*'],
+  } = options;
 
   const statements: iam.PolicyStatement[] = [];
 
@@ -29,12 +34,9 @@ export function createBedrockPolicyStatements(options: BedrockPolicyOptions): ia
     new iam.PolicyStatement({
       sid: 'BedrockModelInvocation',
       effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:InvokeModel',
-        'bedrock:InvokeModelWithResponseStream',
-      ],
-      resources: modelFamilies.map(family => 
-        `arn:aws:bedrock:${region}::foundation-model/${family}`
+      actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+      resources: modelFamilies.map(
+        (family) => `arn:aws:bedrock:${region}::foundation-model/${family}`
       ),
       conditions: {
         StringEquals: {
@@ -49,10 +51,7 @@ export function createBedrockPolicyStatements(options: BedrockPolicyOptions): ia
     new iam.PolicyStatement({
       sid: 'BedrockReadOnly',
       effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:ListFoundationModels',
-        'bedrock:GetFoundationModel',
-      ],
+      actions: ['bedrock:ListFoundationModels', 'bedrock:GetFoundationModel'],
       resources: ['*'], // These actions don't support resource restrictions
       conditions: {
         StringEquals: {
@@ -91,11 +90,7 @@ export function createS3PolicyStatements(options: S3PolicyOptions): iam.PolicySt
   const statements: iam.PolicyStatement[] = [];
 
   // Object operations
-  const objectActions = [
-    's3:GetObject',
-    's3:GetObjectVersion',
-    's3:PutObject',
-  ];
+  const objectActions = ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'];
 
   if (allowDelete) {
     objectActions.push('s3:DeleteObject', 's3:DeleteObjectVersion');
@@ -151,13 +146,12 @@ export interface SecretsPolicyOptions {
 /**
  * Create least-privilege IAM policy statements for Secrets Manager access
  */
-export function createSecretsManagerPolicyStatements(options: SecretsPolicyOptions): iam.PolicyStatement[] {
+export function createSecretsManagerPolicyStatements(
+  options: SecretsPolicyOptions
+): iam.PolicyStatement[] {
   const { secretArns, allowUpdate = false } = options;
 
-  const actions = [
-    'secretsmanager:GetSecretValue',
-    'secretsmanager:DescribeSecret',
-  ];
+  const actions = ['secretsmanager:GetSecretValue', 'secretsmanager:DescribeSecret'];
 
   if (allowUpdate) {
     actions.push('secretsmanager:UpdateSecret', 'secretsmanager:PutSecretValue');
@@ -181,7 +175,7 @@ export function createSecretsManagerPolicyStatements(options: SecretsPolicyOptio
 /**
  * Create a condition that restricts access to specific source IPs
  */
-export function createIpRestrictionCondition(allowedIps: string[]): { [key: string]: any } {
+export function createIpRestrictionCondition(allowedIps: string[]): Record<string, unknown> {
   return {
     IpAddress: {
       'aws:SourceIp': allowedIps,
@@ -192,7 +186,7 @@ export function createIpRestrictionCondition(allowedIps: string[]): { [key: stri
 /**
  * Create a condition that requires MFA
  */
-export function createMfaCondition(): { [key: string]: any } {
+export function createMfaCondition(): Record<string, unknown> {
   return {
     Bool: {
       'aws:MultiFactorAuthPresent': 'true',
@@ -203,7 +197,7 @@ export function createMfaCondition(): { [key: string]: any } {
 /**
  * Create a condition that restricts access to specific VPC endpoints
  */
-export function createVpcEndpointCondition(vpcEndpointIds: string[]): { [key: string]: any } {
+export function createVpcEndpointCondition(vpcEndpointIds: string[]): Record<string, unknown> {
   return {
     StringEquals: {
       'aws:SourceVpce': vpcEndpointIds,

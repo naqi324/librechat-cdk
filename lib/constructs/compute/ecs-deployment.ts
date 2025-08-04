@@ -187,14 +187,9 @@ export class ECSDeployment extends Construct {
     // Grant Bedrock access using utility function
     const bedrockStatements = createBedrockPolicyStatements({
       region: cdk.Stack.of(this).region,
-      modelFamilies: [
-        'anthropic.claude-*',
-        'amazon.titan-*',
-        'meta.llama*',
-        'mistral.*'
-      ],
+      modelFamilies: ['anthropic.claude-*', 'amazon.titan-*', 'meta.llama*', 'mistral.*'],
     });
-    bedrockStatements.forEach(statement => 
+    bedrockStatements.forEach((statement) =>
       taskDefinition.taskRole.addToPrincipalPolicy(statement)
     );
 
@@ -283,14 +278,9 @@ export class ECSDeployment extends Construct {
     // Grant Bedrock access using utility function
     const bedrockStatements = createBedrockPolicyStatements({
       region: cdk.Stack.of(this).region,
-      modelFamilies: [
-        'anthropic.claude-*',
-        'amazon.titan-*',
-        'meta.llama*',
-        'mistral.*'
-      ],
+      modelFamilies: ['anthropic.claude-*', 'amazon.titan-*', 'meta.llama*', 'mistral.*'],
     });
-    bedrockStatements.forEach(statement => 
+    bedrockStatements.forEach((statement) =>
       taskDefinition.taskRole.addToPrincipalPolicy(statement)
     );
 

@@ -61,9 +61,8 @@ export class DatabaseConstruct extends Construct {
       description: `LibreChat PostgreSQL encryption key - ${props.environment}`,
       enableKeyRotation: true,
       alias: `alias/librechat-postgres-${props.environment}`,
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       pendingWindow: cdk.Duration.days(30),
     });
 
@@ -155,9 +154,8 @@ export class DatabaseConstruct extends Construct {
       description: `LibreChat PostgreSQL encryption key - ${props.environment}`,
       enableKeyRotation: true,
       alias: `alias/librechat-postgres-${props.environment}`,
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       pendingWindow: cdk.Duration.days(30),
     });
 
@@ -229,9 +227,8 @@ export class DatabaseConstruct extends Construct {
       description: `LibreChat DocumentDB encryption key - ${props.environment}`,
       enableKeyRotation: true,
       alias: `alias/librechat-docdb-${props.environment}`,
-      removalPolicy: props.environment === 'production' 
-        ? cdk.RemovalPolicy.RETAIN 
-        : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       pendingWindow: cdk.Duration.days(30),
     });
 
@@ -317,7 +314,7 @@ export class DatabaseConstruct extends Construct {
           DB_NAME: 'librechat',
           DB_SECRET_ID: this.secrets['postgres'].secretArn,
           MAX_RETRIES: '30', // Reduced from 90 for faster deployment
-          RETRY_DELAY: '5',  // Reduced from 10 seconds
+          RETRY_DELAY: '5', // Reduced from 10 seconds
         },
         timeout: cdk.Duration.minutes(10), // Reduced from 15 to 10 minutes for faster failures
         memorySize: 256,

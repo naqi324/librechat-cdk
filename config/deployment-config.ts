@@ -340,10 +340,10 @@ export const presetConfigs = {
   // Ultra-minimal development setup - fastest deployment for Isengard token constraints
   'ultra-minimal-dev': new DeploymentConfigBuilder('development')
     .withDeploymentMode('EC2') // EC2 is faster than ECS
-    .withFeatures({ 
-      rag: false, 
+    .withFeatures({
+      rag: false,
       meilisearch: false,
-      sharePoint: false 
+      sharePoint: false,
     })
     .withVpc({
       useExisting: false,
@@ -357,8 +357,8 @@ export const presetConfigs = {
       allocatedStorage: 20,
       backupRetentionDays: 1,
     })
-    .withCompute({ 
-      instanceType: 't3.small' // Smaller instance for faster provisioning
+    .withCompute({
+      instanceType: 't3.small', // Smaller instance for faster provisioning
     })
     .withResourceSize('xs') // Ensure xs sizing
     .withEnhancedMonitoring(false), // Disable monitoring for speed

@@ -34,27 +34,30 @@ class CostEstimator {
 
     // EC2/ECS Compute costs
     if (config.deploymentMode === 'EC2') {
-      estimates.push(...(await this.estimateEC2Costs(config)));
+      estimates.push(...(await this.estimateEC2Costs(config, environment)));
     } else {
-      estimates.push(...(await this.estimateECSCosts(config)));
+      estimates.push(...(await this.estimateECSCosts(config, environment)));
     }
 
     // Database costs
-    estimates.push(...(await this.estimateDatabaseCosts(config)));
+    estimates.push(...(await this.estimateDatabaseCosts(config, environment)));
 
     // Storage costs
-    estimates.push(...(await this.estimateStorageCosts(config)));
+    estimates.push(...(await this.estimateStorageCosts(config, environment)));
 
     // Network costs
-    estimates.push(...(await this.estimateNetworkCosts(config)));
+    estimates.push(...(await this.estimateNetworkCosts(config, environment)));
 
     // Additional services
-    estimates.push(...(await this.estimateAdditionalServicesCosts(config)));
+    estimates.push(...(await this.estimateAdditionalServicesCosts(config, environment)));
 
     return estimates;
   }
 
-  private async estimateEC2Costs(config: any): Promise<CostEstimate[]> {
+  private async estimateEC2Costs(
+    config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    _environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
     const instanceType = config.computeConfig?.instanceType || 't3.xlarge';
 
@@ -100,7 +103,10 @@ class CostEstimator {
     return estimates;
   }
 
-  private async estimateECSCosts(config: any): Promise<CostEstimate[]> {
+  private async estimateECSCosts(
+    config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    _environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
     const cpu = config.computeConfig?.cpu || 4096;
     const memory = config.computeConfig?.memory || 8192;
@@ -136,7 +142,10 @@ class CostEstimator {
     return estimates;
   }
 
-  private async estimateDatabaseCosts(config: any): Promise<CostEstimate[]> {
+  private async estimateDatabaseCosts(
+    config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
     const engine = config.databaseConfig?.engine || 'postgres';
 
@@ -144,7 +153,7 @@ class CostEstimator {
     if (engine.includes('postgres')) {
       const instanceClass = config.databaseConfig?.instanceClass || 'db.t3.medium';
 
-      if (config.environment === 'production') {
+      if (environment === 'production') {
         // Aurora Serverless v2
         estimates.push({
           service: 'RDS Aurora',
@@ -219,7 +228,10 @@ class CostEstimator {
     return estimates;
   }
 
-  private async estimateStorageCosts(config: any): Promise<CostEstimate[]> {
+  private async estimateStorageCosts(
+    config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    _environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
 
     // S3 storage
@@ -270,7 +282,10 @@ class CostEstimator {
     return estimates;
   }
 
-  private async estimateNetworkCosts(config: any): Promise<CostEstimate[]> {
+  private async estimateNetworkCosts(
+    config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    _environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
 
     // ALB
@@ -335,7 +350,10 @@ class CostEstimator {
     return estimates;
   }
 
-  private async estimateAdditionalServicesCosts(config: any): Promise<CostEstimate[]> {
+  private async estimateAdditionalServicesCosts(
+    _config: (typeof environmentConfigs)[keyof typeof environmentConfigs],
+    environment: keyof typeof environmentConfigs
+  ): Promise<CostEstimate[]> {
     const estimates: CostEstimate[] = [];
 
     // CloudWatch
@@ -382,7 +400,7 @@ class CostEstimator {
     });
 
     // SNS (for alerts)
-    if (config.alertEmail) {
+    if (environment === 'production') {
       estimates.push({
         service: 'SNS',
         resource: 'Email notifications',
@@ -606,6 +624,7 @@ async function main() {
     estimator.generateReport(estimates);
 
     if (args.includes('--save')) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fs = require('fs');
       const filename = `cost-estimate-${environment}-${new Date().toISOString().split('T')[0]}.json`;
       fs.writeFileSync(filename, JSON.stringify(estimates, null, 2));

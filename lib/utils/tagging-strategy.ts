@@ -49,12 +49,12 @@ export class TaggingStrategy {
   public applyTags(construct: IConstruct, additionalTags?: { [key: string]: string }): void {
     // Apply standard tags
     const standardTags = this.config.standardTags;
-    
+
     // Required tags
     cdk.Tags.of(construct).add('Application', standardTags.Application);
     cdk.Tags.of(construct).add('Environment', standardTags.Environment);
     cdk.Tags.of(construct).add('ManagedBy', standardTags.ManagedBy || 'CDK');
-    
+
     // Optional standard tags
     if (standardTags.Owner) {
       cdk.Tags.of(construct).add('Owner', standardTags.Owner);
@@ -111,7 +111,7 @@ export class TaggingStrategy {
    */
   public applyResourceSpecificTags(construct: IConstruct, resourceType: string): void {
     const resourceTags: { [key: string]: string } = {
-      'ResourceType': resourceType,
+      ResourceType: resourceType,
     };
 
     // Add specific tags based on resource type
@@ -119,25 +119,27 @@ export class TaggingStrategy {
       case 'Database':
         resourceTags['BackupRequired'] = 'true';
         resourceTags['EncryptionRequired'] = 'true';
-        resourceTags['PHIData'] = this.config.standardTags.Compliance?.includes('HIPAA') ? 'true' : 'false';
+        resourceTags['PHIData'] = this.config.standardTags.Compliance?.includes('HIPAA')
+          ? 'true'
+          : 'false';
         break;
-      
+
       case 'Storage':
         resourceTags['EncryptionRequired'] = 'true';
         resourceTags['LifecyclePolicy'] = 'enabled';
         resourceTags['AccessLogging'] = 'enabled';
         break;
-      
+
       case 'Compute':
         resourceTags['PatchingRequired'] = 'true';
         resourceTags['MonitoringRequired'] = 'true';
         break;
-      
+
       case 'Network':
         resourceTags['FlowLogsEnabled'] = 'true';
         resourceTags['SecurityGroupRequired'] = 'true';
         break;
-      
+
       case 'Security':
         resourceTags['AuditRequired'] = 'true';
         resourceTags['ComplianceScope'] = 'all';
@@ -186,10 +188,12 @@ export class TaggingStrategy {
   /**
    * Create compliance-specific tags based on the compliance framework
    */
-  public static getComplianceTags(framework: 'HIPAA' | 'SOC2' | 'PCI' | 'ISO27001'): { [key: string]: string } {
+  public static getComplianceTags(framework: 'HIPAA' | 'SOC2' | 'PCI' | 'ISO27001'): {
+    [key: string]: string;
+  } {
     const complianceTags: { [key: string]: string } = {
-      'ComplianceFramework': framework,
-      'ComplianceRequired': 'true',
+      ComplianceFramework: framework,
+      ComplianceRequired: 'true',
     };
 
     switch (framework) {
@@ -199,19 +203,19 @@ export class TaggingStrategy {
         complianceTags['AuditRequired'] = 'true';
         complianceTags['RetentionYears'] = '7';
         break;
-      
+
       case 'SOC2':
         complianceTags['SOC2Scope'] = 'true';
         complianceTags['ChangeControlRequired'] = 'true';
         complianceTags['AccessReviewRequired'] = 'true';
         break;
-      
+
       case 'PCI':
         complianceTags['PCIScope'] = 'true';
         complianceTags['CardholderData'] = 'false'; // Should be explicitly set
         complianceTags['NetworkSegmentation'] = 'required';
         break;
-      
+
       case 'ISO27001':
         complianceTags['ISO27001Scope'] = 'true';
         complianceTags['RiskAssessmentRequired'] = 'true';

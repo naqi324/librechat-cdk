@@ -7,6 +7,7 @@ cdk.context.json
 *.js
 *.d.ts
 *.js.map
+*.d.ts.map
 .tsbuildinfo
 dist/
 
@@ -140,6 +141,8 @@ lambda/*/lambda-package.zip
 
 # Docker
 .dockerignore
+docker-compose.yml
+docker-compose.yaml
 docker-compose.override.yml
 docker-compose.local.yml
 
@@ -189,6 +192,8 @@ docs/coverage/
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+settings.json
+test-*.sh
 
 # Custom deployment scripts (user-specific)
 deploy-*.sh
