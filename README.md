@@ -116,7 +116,7 @@ For manual deployment options, see the [Quick Reference](QUICK_REFERENCE.md).
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and contribute to the project.
+We welcome contributions! Please feel free to submit pull requests, report issues, and help improve the project. For questions or discussions, please open an issue on GitHub.
 
 ## License
 
