@@ -38,6 +38,16 @@ export class AuditConstruct extends Construct {
       'kms:DescribeKey'
     );
 
+    // Grant CloudWatch Logs service access to the key
+    this.encryptionKey.grant(
+      new iam.ServicePrincipal('logs.amazonaws.com'),
+      'kms:Encrypt',
+      'kms:Decrypt',
+      'kms:ReEncrypt*',
+      'kms:GenerateDataKey*',
+      'kms:DescribeKey'
+    );
+
     // Audit bucket with encryption and lifecycle
     this.auditBucket = new s3.Bucket(this, 'AuditBucket', {
       bucketName: `librechat-audit-${cdk.Stack.of(this).account}-${props.environment}-${cdk.Stack.of(this).region}`,
