@@ -10,6 +10,7 @@ export interface StorageConstructProps {
   environment: string;
   enableEfs?: boolean;
   vpc?: ec2.IVpc;
+  enableHipaaCompliance?: boolean;
 }
 
 export class StorageConstruct extends Construct {
@@ -42,26 +43,7 @@ export class StorageConstruct extends Construct {
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       versioned: props.environment === 'production',
-      lifecycleRules: [
-        {
-          id: 'delete-old-versions',
-          noncurrentVersionExpiration: cdk.Duration.days(30),
-          abortIncompleteMultipartUploadAfter: cdk.Duration.days(7),
-        },
-        {
-          id: 'transition-to-ia',
-          transitions: [
-            {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30),
-            },
-            {
-              storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL,
-              transitionAfter: cdk.Duration.days(90),
-            },
-          ],
-        },
-      ],
+      lifecycleRules: this.getLifecycleRules(props),
       cors: [
         {
           allowedOrigins: ['*'],
@@ -112,6 +94,60 @@ export class StorageConstruct extends Construct {
     cdk.Tags.of(bucket).add('Environment', props.environment);
 
     return bucket;
+  }
+
+  private getLifecycleRules(props: StorageConstructProps): s3.LifecycleRule[] {
+    const rules: s3.LifecycleRule[] = [
+      {
+        id: 'delete-old-versions',
+        noncurrentVersionExpiration: cdk.Duration.days(30),
+        abortIncompleteMultipartUploadAfter: cdk.Duration.days(7),
+      },
+    ];
+
+    if (props.enableHipaaCompliance) {
+      // HIPAA-eligible infrastructure requires 7-year retention with specific transition stages
+      rules.push({
+        id: 'hipaa-eligible-lifecycle',
+        transitions: [
+          {
+            storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+            transitionAfter: cdk.Duration.days(90),
+          },
+          {
+            storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL,
+            transitionAfter: cdk.Duration.days(365),
+          },
+          {
+            storageClass: s3.StorageClass.GLACIER,
+            transitionAfter: cdk.Duration.days(1095), // 3 years
+          },
+          {
+            storageClass: s3.StorageClass.DEEP_ARCHIVE,
+            transitionAfter: cdk.Duration.days(1825), // 5 years
+          },
+        ],
+        expiration: cdk.Duration.days(2555), // 7 years for HIPAA
+        noncurrentVersionExpiration: cdk.Duration.days(2555),
+      });
+    } else {
+      // Standard lifecycle for non-HIPAA environments
+      rules.push({
+        id: 'transition-to-ia',
+        transitions: [
+          {
+            storageClass: s3.StorageClass.INFREQUENT_ACCESS,
+            transitionAfter: cdk.Duration.days(30),
+          },
+          {
+            storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL,
+            transitionAfter: cdk.Duration.days(90),
+          },
+        ],
+      });
+    }
+
+    return rules;
   }
 
   private createEfsStorage(props: StorageConstructProps): void {

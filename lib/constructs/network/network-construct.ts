@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import { Construct } from 'constructs';
 
 export interface VpcConstructProps {
@@ -11,6 +12,8 @@ export interface VpcConstructProps {
   maxAzs?: number;
   natGateways?: number;
   environment: string;
+  enableHipaaCompliance?: boolean;
+  encryptionKey?: kms.IKey;
 }
 
 export class VpcConstruct extends Construct {
@@ -52,7 +55,7 @@ export class VpcConstruct extends Construct {
       this.addVpcEndpoints(vpc, props.environment);
 
       // Add flow logs for all environments (security best practice)
-      this.addFlowLogs(vpc, props.environment);
+      this.addFlowLogs(vpc, props);
 
       // Tag subnets for better identification
       this.tagSubnets();
@@ -160,14 +163,18 @@ export class VpcConstruct extends Construct {
     }
   }
 
-  private addFlowLogs(vpc: ec2.Vpc, environment: string): void {
-    // Create a log group with appropriate retention
+  private addFlowLogs(vpc: ec2.Vpc, props: VpcConstructProps): void {
+    // Create a log group with appropriate retention (enhanced for HIPAA)
     const logGroup = new logs.LogGroup(this, 'VPCFlowLogGroup', {
       logGroupName: `/aws/vpc/flowlogs/${cdk.Stack.of(this).stackName}`,
-      retention:
-        environment === 'production' ? logs.RetentionDays.ONE_YEAR : logs.RetentionDays.ONE_MONTH,
+      retention: props.enableHipaaCompliance
+        ? logs.RetentionDays.TWO_YEARS
+        : props.environment === 'production'
+        ? logs.RetentionDays.ONE_YEAR
+        : logs.RetentionDays.ONE_MONTH,
+      encryptionKey: props.encryptionKey,  // Encrypt for HIPAA
       removalPolicy:
-        environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
     // Create IAM role for VPC Flow Logs
@@ -184,14 +191,39 @@ export class VpcConstruct extends Construct {
       resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
       destination: ec2.FlowLogDestination.toCloudWatchLogs(logGroup, flowLogRole),
       trafficType: ec2.FlowLogTrafficType.ALL,
-      maxAggregationInterval: ec2.FlowLogMaxAggregationInterval.ONE_MINUTE,
-      // Use custom log format for comprehensive logging
-      logFormat: undefined, // Will use default AWS format which includes all necessary fields
+      maxAggregationInterval: props.enableHipaaCompliance
+        ? ec2.FlowLogMaxAggregationInterval.ONE_MINUTE  // More frequent for HIPAA
+        : ec2.FlowLogMaxAggregationInterval.TEN_MINUTES,
+      flowLogName: `librechat-vpc-flowlog-${props.environment}`,
     });
+
+    // Additional subnet-level flow logs for HIPAA-eligible infrastructure
+    if (props.enableHipaaCompliance) {
+      const subnetLogGroup = new logs.LogGroup(this, 'SubnetFlowLogsGroup', {
+        logGroupName: `/aws/vpc/subnet-flowlogs/${cdk.Stack.of(this).stackName}`,
+        retention: logs.RetentionDays.TWO_YEARS,
+        encryptionKey: props.encryptionKey,
+        removalPolicy: cdk.RemovalPolicy.RETAIN,
+      });
+
+      // Flow logs for private subnets (where PHI processing occurs)
+      vpc.privateSubnets.forEach((subnet, index) => {
+        new ec2.FlowLog(this, `PrivateSubnetFlowLog${index}`, {
+          resourceType: ec2.FlowLogResourceType.fromSubnet(subnet),
+          destination: ec2.FlowLogDestination.toCloudWatchLogs(subnetLogGroup, flowLogRole),
+          trafficType: ec2.FlowLogTrafficType.ALL,
+          flowLogName: `librechat-private-subnet-${index}-${props.environment}`,
+          maxAggregationInterval: ec2.FlowLogMaxAggregationInterval.ONE_MINUTE,
+        });
+      });
+    }
 
     // Add tags for compliance
     cdk.Tags.of(logGroup).add('Purpose', 'VPC-Flow-Logs');
-    cdk.Tags.of(logGroup).add('Compliance', 'Security-Monitoring');
+    cdk.Tags.of(logGroup).add('Compliance', props.enableHipaaCompliance ? 'HIPAA' : 'Security-Monitoring');
+    if (props.enableHipaaCompliance) {
+      cdk.Tags.of(logGroup).add('DataClassification', 'PHI');
+    }
   }
 
   private tagSubnets(): void {

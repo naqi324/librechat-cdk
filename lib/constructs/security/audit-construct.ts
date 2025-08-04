@@ -119,7 +119,7 @@ export class AuditConstruct extends Construct {
       insightTypes: [cloudtrail.InsightType.API_CALL_RATE, cloudtrail.InsightType.API_ERROR_RATE],
     });
 
-    // Log S3 data events for HIPAA compliance
+    // Log S3 data events for HIPAA-eligible infrastructure
     if (props.enableDataEvents || props.enableHipaaCompliance) {
       // Add S3 data events
       this.trail.addEventSelector(

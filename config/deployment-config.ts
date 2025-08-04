@@ -98,6 +98,50 @@ export const environmentConfigs = {
     enableMeilisearch: true,
     enableSharePoint: true,
     enableEnhancedMonitoring: true,
+    enableAuditLogging: true,
+    enableHipaaCompliance: true,
+    tagConfig: {
+      owner: 'DevOps',
+      costCenter: 'Engineering', 
+      project: 'LibreChat',
+      dataClassification: 'PHI',
+      compliance: 'HIPAA',
+    },
+  },
+
+  enterprise: {
+    deploymentMode: 'ECS' as const,
+    vpcConfig: {
+      useExisting: false,
+      cidr: '10.3.0.0/16',
+      maxAzs: 3,
+      natGateways: 3,
+    },
+    databaseConfig: {
+      engine: 'postgres-and-documentdb' as const,
+      instanceClass: 'db.r6g.xlarge',
+      allocatedStorage: 500,
+      backupRetentionDays: 35,
+    },
+    computeConfig: {
+      instanceType: 'c5.4xlarge',
+      desiredCount: 5,
+      cpu: 8192,
+      memory: 16384,
+    },
+    enableRag: true,
+    enableMeilisearch: true,
+    enableSharePoint: true,
+    enableEnhancedMonitoring: true,
+    enableAuditLogging: true,
+    enableHipaaCompliance: true,
+    tagConfig: {
+      owner: 'Security',
+      costCenter: 'Compliance',
+      project: 'LibreChat-HIPAA',
+      dataClassification: 'PHI',
+      compliance: 'HIPAA',
+    },
   },
 };
 

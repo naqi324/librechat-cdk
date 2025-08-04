@@ -15,12 +15,13 @@ import { ECSDeployment } from './constructs/compute/ecs-deployment';
 import { StorageConstruct } from './constructs/storage/storage-construct';
 import { MonitoringConstruct } from './constructs/monitoring/monitoring-construct';
 import { AuditConstruct } from './constructs/security/audit-construct';
+import { ComplianceConstruct } from './constructs/security/compliance-construct';
 import { TaggingStrategy, StandardTags } from './utils/tagging-strategy';
 
 export interface LibreChatStackProps extends cdk.StackProps {
   // Deployment Configuration
   deploymentMode: 'EC2' | 'ECS';
-  environment: 'development' | 'staging' | 'production';
+  environment: 'development' | 'staging' | 'production' | 'enterprise';
 
   // Network Configuration
   vpcConfig?: {
@@ -117,6 +118,19 @@ export class LibreChatStack extends cdk.Stack {
     // Apply tags to the stack itself
     taggingStrategy.applyTags(this);
 
+    // Create encryption key for HIPAA-eligible infrastructure (if enabled)
+    let encryptionKey: any = undefined;
+    if (props.enableHipaaCompliance) {
+      encryptionKey = new (require('aws-cdk-lib/aws-kms')).Key(this, 'HipaaEncryptionKey', {
+        description: 'Master encryption key for HIPAA-eligible infrastructure',
+        enableKeyRotation: true,
+        alias: `alias/librechat-hipaa-${props.environment}`,
+        removalPolicy: props.environment === 'production' 
+          ? cdk.RemovalPolicy.RETAIN 
+          : cdk.RemovalPolicy.DESTROY,
+      });
+    }
+
     // Create or import VPC
     const vpcConstructProps: {
       useExisting: boolean;
@@ -124,6 +138,8 @@ export class LibreChatStack extends cdk.Stack {
       maxAzs: number;
       natGateways: number;
       environment: string;
+      enableHipaaCompliance?: boolean;
+      encryptionKey?: any;
       existingVpcId?: string;
     } = {
       useExisting: props.vpcConfig?.useExisting || false,
@@ -131,6 +147,8 @@ export class LibreChatStack extends cdk.Stack {
       maxAzs: props.vpcConfig?.maxAzs || 2,
       natGateways: props.vpcConfig?.natGateways || (props.environment === 'production' ? 2 : 1),
       environment: props.environment,
+      enableHipaaCompliance: props.enableHipaaCompliance,
+      encryptionKey: encryptionKey,
     };
 
     if (props.vpcConfig?.existingVpcId) {
@@ -152,11 +170,22 @@ export class LibreChatStack extends cdk.Stack {
       taggingStrategy.applyResourceSpecificTags(auditConstruct, 'Security');
     }
 
+    // Create HIPAA-eligible monitoring
+    if (props.enableHipaaCompliance) {
+      const complianceConstruct = new ComplianceConstruct(this, 'Compliance', {
+        environment: props.environment,
+        enableHipaaCompliance: props.enableHipaaCompliance,
+        encryptionKey: encryptionKey,
+      });
+      taggingStrategy.applyResourceSpecificTags(complianceConstruct, 'Compliance');
+    }
+
     // Create storage resources
     const storage = new StorageConstruct(this, 'Storage', {
       environment: props.environment,
       enableEfs: props.deploymentMode === 'ECS',
       vpc: this.vpc,
+      enableHipaaCompliance: props.enableHipaaCompliance,
     });
     taggingStrategy.applyResourceSpecificTags(storage, 'Storage');
 

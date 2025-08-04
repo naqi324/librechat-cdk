@@ -250,10 +250,6 @@ export class EC2Deployment extends Construct {
         ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json`
         : 'echo "{}" > /tmp/docdb-secrets.json',
 
-      // Extract database credentials for docker-compose
-      'DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
-      'DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
-
       // Create environment file
       'cat > .env << EOL',
       'HOST=0.0.0.0',
@@ -262,6 +258,11 @@ export class EC2Deployment extends Construct {
       '',
       '# Database',
       `DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password)@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem`,
+      'POSTGRES_DB=librechat',
+      'POSTGRES_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
+      'POSTGRES_PASSWORD=$(cat /tmp/db-secrets.json | jq -r .password)',
+      `DB_HOST=${props.database.endpoints['postgres']}`,
+      'DB_PORT=5432',
       props.database.endpoints['documentdb']
         ? `MONGO_URI=${buildDocumentDBConnectionTemplate(props.database.endpoints['documentdb'])}`
         : 'MONGO_URI=mongodb://mongodb:27017/LibreChat',
@@ -298,10 +299,16 @@ export class EC2Deployment extends Construct {
       `MEILISEARCH_ENABLED=${props.enableMeilisearch}`,
       'MEILISEARCH_URL=http://meilisearch:7700',
       `MEILISEARCH_MASTER_KEY=$(openssl rand -hex 32)`,
+      '',
+      '# Web Search (Optional - configure API keys in AWS Secrets Manager)',
+      'SEARCH_ENABLED=true',
+      'GOOGLE_SEARCH_API_KEY=$(cat /tmp/app-secrets.json | jq -r .google_search_api_key // "")',
+      'GOOGLE_CSE_ID=$(cat /tmp/app-secrets.json | jq -r .google_cse_id // "")',
+      'BING_API_KEY=$(cat /tmp/app-secrets.json | jq -r .bing_api_key // "")',
       'EOL',
 
       // Create docker-compose.yml
-      'cat > docker-compose.yml << "EOL"',
+      'cat > docker-compose.yml << EOL',
       'version: "3.8"',
       '',
       'services:',
@@ -325,12 +332,6 @@ export class EC2Deployment extends Construct {
       '    container_name: rag-api',
       '    restart: unless-stopped',
       '    env_file: .env',
-      '    environment:',
-      '      - POSTGRES_DB=librechat',
-      '      - POSTGRES_USER=${DB_USER}',
-      '      - POSTGRES_PASSWORD=${DB_PASS}',
-      `      - DB_HOST=${props.database.endpoints['postgres']}`,
-      '      - DB_PORT=5432',
       '    ports:',
       '      - "8000:8000"',
       '',
@@ -368,6 +369,14 @@ export class EC2Deployment extends Construct {
       '        - "meta.llama3-8b-instruct-v1:0"',
       '        - "mistral.mistral-large-2407-v1:0"',
       '        - "mistral.mixtral-8x7b-instruct-v0:1"',
+      '',
+      '  google:',
+      '    enabled: true',
+      '    availableTools: ["google_search"]',
+      '',
+      '  bing:',
+      '    enabled: true', 
+      '    availableTools: ["bing_search"]',
       '',
       'fileConfig:',
       '  endpoints:',
