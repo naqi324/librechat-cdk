@@ -70,7 +70,9 @@ export class AuditConstruct extends Construct {
         },
       ],
       serverAccessLogsPrefix: 'access-logs/',
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: 
+        props.environment === 'production' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: props.environment !== 'production',
     });
 
     // Create CloudWatch log group for CloudTrail
