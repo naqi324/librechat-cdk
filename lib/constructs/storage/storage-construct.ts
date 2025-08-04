@@ -41,7 +41,7 @@ export class StorageConstruct extends Construct {
       bucketName: `${stackName}-docs-${account}-${region}-${uniqueSuffix}`,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      versioned: true,
+      versioned: props.environment === 'production',
       lifecycleRules: [
         {
           id: 'delete-old-versions',

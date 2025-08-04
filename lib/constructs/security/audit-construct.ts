@@ -49,12 +49,14 @@ export class AuditConstruct extends Construct {
     );
 
     // Audit bucket with encryption and lifecycle
+    const uniqueSuffix = Date.now().toString(36).slice(-4);
+    const envShort = props.environment.slice(0, 3); // dev/sta/pro
     this.auditBucket = new s3.Bucket(this, 'AuditBucket', {
-      bucketName: `librechat-audit-${cdk.Stack.of(this).account}-${props.environment}-${cdk.Stack.of(this).region}`,
+      bucketName: `lc-audit-${cdk.Stack.of(this).account}-${envShort}-${uniqueSuffix}`,
       encryption: s3.BucketEncryption.KMS,
       encryptionKey: this.encryptionKey,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      versioned: true,
+      versioned: props.environment === 'production',
       lifecycleRules: [
         {
           id: 'ArchiveOldLogs',
