@@ -242,6 +242,9 @@ export class LibreChatStack extends cdk.Stack {
 
       deployment = new EC2Deployment(this, 'EC2Deployment', ec2Props);
       taggingStrategy.applyResourceSpecificTags(deployment, 'Compute');
+      
+      // Ensure EC2 instance waits for database to be ready
+      deployment.node.addDependency(database);
     } else {
       // Create ECS cluster
       const cluster = new ecs.Cluster(this, 'ECSCluster', {

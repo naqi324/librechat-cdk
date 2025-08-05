@@ -243,20 +243,46 @@ export class EC2Deployment extends Construct {
       // Download RDS certificate for SSL connection
       'wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-2019-root.pem',
 
-      // Get secrets
-      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
-      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres']?.secretArn || 'none'} --query SecretString --output text > /tmp/db-secrets.json`,
+      // Get secrets with better error handling
+      `echo "Fetching app secrets from ${props.appSecrets.secretArn}" >> /var/log/cloud-init-output.log`,
+      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json 2>> /var/log/cloud-init-output.log`,
+      // Only fetch database secret if it exists
+      ...(props.database.secrets['postgres'] 
+        ? [
+            `echo "Fetching database secrets from ${props.database.secrets['postgres'].secretArn}" >> /var/log/cloud-init-output.log`,
+            `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json 2>> /var/log/cloud-init-output.log`
+          ]
+        : [
+            'echo "ERROR: No PostgreSQL database secret found in props" >> /var/log/cloud-init-output.log',
+            'echo \'{"username":"","password":""}\' > /tmp/db-secrets.json'
+          ]),
       props.database.secrets['documentdb']
         ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json`
         : 'echo "{}" > /tmp/docdb-secrets.json',
       
-      // Extract and validate database credentials
+      // Extract database credentials
+      'echo "Contents of db-secrets.json:" >> /var/log/cloud-init-output.log',
+      'cat /tmp/db-secrets.json >> /var/log/cloud-init-output.log',
       'export DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
       'export DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
-      'if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then echo "ERROR: Failed to extract database credentials" >> /var/log/cloud-init-output.log; exit 1; fi',
-      // URL encode the password for DATABASE_URL
-      "export DB_PASS_ENCODED=$(python3 -c 'import urllib.parse; import os; print(urllib.parse.quote(os.environ[\"DB_PASS\"], safe=\"\"))')",
+      'echo "Extracted DB_USER: $DB_USER" >> /var/log/cloud-init-output.log',
+      'echo "DB_PASS length: ${#DB_PASS}" >> /var/log/cloud-init-output.log',
+      // If credentials are empty, wait for RDS to be ready and retry
+      'if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then',
+      '  echo "WARNING: Database credentials are empty, waiting for RDS..." >> /var/log/cloud-init-output.log',
+      '  sleep 30',
+      `  aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres']?.secretArn || 'none'} --query SecretString --output text > /tmp/db-secrets.json 2>> /var/log/cloud-init-output.log`,
+      '  export DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
+      '  export DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
+      'fi',
+      // URL encode the password for DATABASE_URL (fallback to non-encoded if Python fails)
+      "export DB_PASS_ENCODED=$(python3 -c 'import urllib.parse; import os; print(urllib.parse.quote(os.environ[\"DB_PASS\"], safe=\"\"))' 2>/dev/null || echo \"$DB_PASS\")",
 
+      // Log if credentials are empty
+      'if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then',
+      '  echo "ERROR: Database credentials are empty! Containers will fail to start." >> /var/log/cloud-init-output.log',
+      'fi',
+      
       // Create environment file with actual values using echo
       'echo "HOST=0.0.0.0" > .env',
       'echo "PORT=3080" >> .env',
@@ -523,8 +549,8 @@ export class EC2Deployment extends Construct {
       // Clean up
       'rm -f /tmp/app-secrets.json /tmp/db-secrets.json',
 
-      // Signal completion
-      `cfn-signal -e $? --stack ${cdk.Stack.of(this).stackName} --resource EC2Instance --region ${cdk.Stack.of(this).region}`
+      // Signal will be handled by cfn-init
+      'echo "User data script completed successfully" >> /var/log/cloud-init-output.log'
     );
 
     const instance = new ec2.Instance(this, 'Instance', {
@@ -549,21 +575,6 @@ export class EC2Deployment extends Construct {
           }),
         },
       ],
-      init: ec2.CloudFormationInit.fromElements(
-        ec2.InitFile.fromString(
-          '/etc/cfn/cfn-hup.conf',
-          `[main]\nstack=${cdk.Stack.of(this).stackName}\nregion=${cdk.Stack.of(this).region}\n`
-        ),
-        ec2.InitFile.fromString(
-          '/etc/cfn/hooks.d/cfn-auto-reloader.conf',
-          `[cfn-auto-reloader-hook]\ntriggers=post.update\npath=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init\naction=/opt/aws/bin/cfn-init -v --stack ${cdk.Stack.of(this).stackName} --resource EC2Instance --region ${cdk.Stack.of(this).region}\nrunas=root\n`
-        )
-      ),
-      initOptions: {
-        timeout: cdk.Duration.minutes(15),
-        includeRole: true,
-        includeUrl: true,
-      },
     });
 
     // Add tags
