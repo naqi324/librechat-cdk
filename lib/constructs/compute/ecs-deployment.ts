@@ -124,6 +124,13 @@ export class ECSDeployment extends Construct {
       secrets: {
         MEILI_MASTER_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'meilisearch_master_key'),
       },
+      healthCheck: {
+        command: ['CMD-SHELL', 'curl -f http://localhost:7700/health || exit 1'],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(10),
+        retries: 3,
+        startPeriod: cdk.Duration.seconds(30),
+      },
     });
 
     container.addPortMappings({
@@ -204,10 +211,17 @@ export class ECSDeployment extends Construct {
         DB_HOST: props.database.endpoints['postgres'] || '',
         DB_PORT: '5432',
         AWS_DEFAULT_REGION: cdk.Stack.of(this).region,
+        BEDROCK_AWS_REGION: cdk.Stack.of(this).region,
+        BEDROCK_AWS_DEFAULT_REGION: cdk.Stack.of(this).region,
         EMBEDDINGS_PROVIDER: 'bedrock',
         EMBEDDINGS_MODEL: 'amazon.titan-embed-text-v2:0',
         CHUNK_SIZE: '1500',
         CHUNK_OVERLAP: '200',
+        VECTOR_DB_TYPE: 'pgvector',
+        COLLECTION_NAME: 'librechat_docs',
+        RAG_TOP_K_RESULTS: '5',
+        RAG_SIMILARITY_THRESHOLD: '0.7',
+        RAG_USE_FULL_CONTEXT: 'false',
       },
       secrets: {
         ...(props.database.secrets['postgres']
@@ -223,6 +237,13 @@ export class ECSDeployment extends Construct {
             }
           : {}),
         JWT_SECRET: ecs.Secret.fromSecretsManager(props.appSecrets, 'jwt_secret'),
+      },
+      healthCheck: {
+        command: ['CMD-SHELL', 'curl -f http://localhost:8000/health || exit 1'],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(10),
+        retries: 5,
+        startPeriod: cdk.Duration.seconds(60),
       },
     });
 
@@ -295,6 +316,8 @@ export class ECSDeployment extends Construct {
 
       // AWS
       AWS_DEFAULT_REGION: cdk.Stack.of(this).region,
+      BEDROCK_AWS_REGION: cdk.Stack.of(this).region,
+      BEDROCK_AWS_DEFAULT_REGION: cdk.Stack.of(this).region,
       ENDPOINTS: 'bedrock',
 
       // S3
@@ -305,14 +328,115 @@ export class ECSDeployment extends Construct {
       // Features
       ALLOW_REGISTRATION: props.environment === 'production' ? 'false' : 'true',
       ALLOW_SOCIAL_LOGIN: 'false',
+      SEARCH: 'true',  // Enable search features
 
       // RAG Configuration
       RAG_ENABLED: String(props.enableRag),
       RAG_API_URL: props.enableRag ? 'http://rag-api.librechat.local:8000' : '',
+      EMBEDDINGS_PROVIDER: 'bedrock',
+      EMBEDDINGS_MODEL: 'amazon.titan-embed-text-v2:0',
+      CHUNK_SIZE: '1500',
+      CHUNK_OVERLAP: '200',
+      RAG_TOP_K_RESULTS: '5',
+      RAG_SIMILARITY_THRESHOLD: '0.7',
+      VECTOR_DB_TYPE: 'pgvector',
+      COLLECTION_NAME: 'librechat_docs',
 
       // Meilisearch
       MEILISEARCH_ENABLED: String(props.enableMeilisearch),
       MEILISEARCH_URL: props.enableMeilisearch ? 'http://meilisearch.librechat.local:7700' : '',
+      
+      // LibreChat Configuration (inline YAML as environment variable)
+      LIBRECHAT_YAML_CONFIG: JSON.stringify({
+        version: '1.2.1',
+        cache: true,
+        endpoints: {
+          bedrock: {
+            enabled: true,
+            titleModel: 'anthropic.claude-sonnet-4-20250514-v1:0',
+            defaultModel: 'anthropic.claude-sonnet-4-20250514-v1:0',
+            streamRate: 35,
+            availableRegions: [cdk.Stack.of(this).region],
+            models: {
+              default: [
+                'anthropic.claude-sonnet-4-20250514-v1:0',     // Claude Sonnet 4.0 (Primary)
+                'anthropic.claude-opus-4-20250514-v1:0',       // Claude Opus 4.0
+                'anthropic.claude-3-5-sonnet-20241022-v2:0',   // Claude 3.5 Sonnet
+                'anthropic.claude-3-5-sonnet-20240620-v1:0',   // Earlier 3.5 Sonnet
+                'anthropic.claude-3-5-haiku-20241022-v1:0',    // Claude 3.5 Haiku
+                'anthropic.claude-3-haiku-20240307-v1:0',      // Claude 3 Haiku
+                'anthropic.claude-3-opus-20240229-v1:0',       // Claude 3 Opus
+                'amazon.titan-text-premier-v1:0',              // AWS Titan
+                'amazon.titan-text-express-v1',                // AWS Titan Express
+              ],
+            },
+          },
+        },
+        tools: [
+          { google_search: { enabled: true } },
+          { bing_search: { enabled: true } },
+          { web_browser: { enabled: true } },
+          { calculator: { enabled: true } },
+        ],
+        fileConfig: {
+          endpoints: {
+            default: {
+              fileLimit: 100,
+              fileSizeLimit: 200,
+              totalSizeLimit: 1000,
+              supportedMimeTypes: [
+                'application/pdf',
+                'text/plain',
+                'text/csv',
+                'text/html',
+                'text/markdown',
+                'application/rtf',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'application/msword',
+                'application/vnd.ms-excel',
+                'application/vnd.ms-powerpoint',
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'image/webp',
+                'application/json',
+                'application/xml',
+              ],
+            },
+          },
+        },
+        ragConfig: {
+          enabled: props.enableRag,
+          api: {
+            url: 'http://rag-api.librechat.local:8000',
+          },
+          embedding: {
+            provider: 'bedrock',
+            model: 'amazon.titan-embed-text-v2:0',
+          },
+          chunking: {
+            strategy: 'semantic',
+            size: 1500,
+            overlap: 200,
+          },
+          retrieval: {
+            topK: 5,
+            similarityThreshold: 0.7,
+          },
+        },
+        registration: {
+          enabled: props.environment !== 'production',
+          socialLogins: ['google', 'github'],
+        },
+        interface: {
+          messageLimit: 40,
+          maxContextTokens: 8192,
+          showModelTokenCounts: true,
+          endpointsMenu: true,
+        },
+      }),
     };
 
     // Add DocumentDB if enabled
@@ -363,6 +487,10 @@ export class ECSDeployment extends Construct {
               ),
             }
           : {}),
+        // Search API Keys (optional - will be undefined if not in secrets)
+        GOOGLE_API_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'google_search_api_key'),
+        GOOGLE_CSE_ID: ecs.Secret.fromSecretsManager(props.appSecrets, 'google_cse_id'),
+        BING_API_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'bing_api_key'),
       },
       healthCheck: {
         command: ['CMD-SHELL', 'curl -f http://localhost:3080/health || exit 1'],

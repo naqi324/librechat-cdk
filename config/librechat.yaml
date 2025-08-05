@@ -1,26 +1,96 @@
-version: 1.1.5
+version: 1.2.1
 
 endpoints:
   bedrock:
-    titleModel: "anthropic.claude-sonnet-4-20250525-v1:0"
+    enabled: true
+    titleModel: "anthropic.claude-sonnet-4-20250514-v1:0"
+    defaultModel: "anthropic.claude-sonnet-4-20250514-v1:0"
+    streamRate: 35
     models:
       default:
-        - "anthropic.claude-sonnet-4-20250525-v1:0"
-        - "anthropic.claude-opus-4-20250514-v1:0"
-        - "anthropic.claude-3-5-sonnet-20241022-v2:0"
-        - "anthropic.claude-3-haiku-20240307-v1:0"
-        - "amazon.titan-text-premier-v1:0"
+        - "anthropic.claude-sonnet-4-20250514-v1:0"    # Primary - Claude Sonnet 4.0 (Latest)
+        - "anthropic.claude-opus-4-20250514-v1:0"      # Claude Opus 4.0
+        - "anthropic.claude-3-5-sonnet-20241022-v2:0"  # Claude 3.5 Sonnet fallback
+        - "anthropic.claude-3-5-sonnet-20240620-v1:0"  # Earlier Sonnet 3.5
+        - "anthropic.claude-3-5-haiku-20241022-v1:0"   # Fast responses
+        - "anthropic.claude-3-haiku-20240307-v1:0"     # Earlier Haiku
+        - "anthropic.claude-3-opus-20240229-v1:0"      # Claude 3 Opus
+        - "amazon.titan-text-premier-v1:0"             # AWS native
+        - "amazon.titan-text-express-v1"               # Fast AWS native
 
 fileConfig:
   endpoints:
     default:
-      fileLimit: 50
-      fileSizeLimit: 100
+      fileLimit: 100
+      fileSizeLimit: 200  # MB per file
+      totalSizeLimit: 1000  # MB total
       supportedMimeTypes:
+        # Documents
         - "application/pdf"
         - "text/plain"
+        - "text/csv"
+        - "text/html"
+        - "text/markdown"
+        - "application/rtf"
+        # Microsoft Office
+        - "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        - "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        - "application/msword"
+        - "application/vnd.ms-excel"
+        - "application/vnd.ms-powerpoint"
+        # Images (for multimodal models)
+        - "image/jpeg"
+        - "image/png"
+        - "image/gif"
+        - "image/webp"
+        # Code files
+        - "application/json"
+        - "application/xml"
+        - "text/javascript"
+        - "text/css"
+
+# Tools Configuration
+tools:
+  - google_search:
+      enabled: true
+  - bing_search:
+      enabled: true
+  - web_browser:
+      enabled: true
+  - calculator:
+      enabled: true
+  - code_interpreter:
+      enabled: false  # Enable if Python runtime available
+
+# RAG Configuration
+ragConfig:
+  enabled: true
+  api:
+    url: "http://rag-api:8000"
+  embedding:
+    provider: "bedrock"
+    model: "amazon.titan-embed-text-v2:0"
+  chunking:
+    strategy: "semantic"
+    size: 1500
+    overlap: 200
+  retrieval:
+    topK: 5
+    similarityThreshold: 0.7
+    rerankingEnabled: true
 
 registration:
   enabled: true
   allowedDomains:
     - "company.com"
+  socialLogins:
+    - "google"
+    - "github"
+
+# Interface Configuration
+interface:
+  messageLimit: 40  # Messages per conversation before warning
+  maxContextTokens: 8192
+  showModelTokenCounts: true
+  endpointsMenu: true
