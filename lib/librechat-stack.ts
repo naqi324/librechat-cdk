@@ -242,6 +242,11 @@ export class LibreChatStack extends cdk.Stack {
 
       deployment = new EC2Deployment(this, 'EC2Deployment', ec2Props);
       taggingStrategy.applyResourceSpecificTags(deployment, 'Compute');
+      
+      // Ensure EC2 deployment waits for database initialization
+      if (database.postgresInitResource) {
+        deployment.node.addDependency(database.postgresInitResource);
+      }
     } else {
       // Create ECS cluster
       const cluster = new ecs.Cluster(this, 'ECSCluster', {
@@ -421,6 +426,9 @@ def handler(event, context):
         
         if 'creds_iv' not in secret_data:
             secret_data['creds_iv'] = secrets.token_hex(16)
+        
+        if 'jwt_refresh_secret' not in secret_data:
+            secret_data['jwt_refresh_secret'] = secrets.token_hex(32)
         
         if enable_meilisearch and 'meilisearch_master_key' not in secret_data:
             secret_data['meilisearch_master_key'] = secrets.token_hex(32)

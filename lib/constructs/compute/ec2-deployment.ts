@@ -243,30 +243,26 @@ export class EC2Deployment extends Construct {
       // Download RDS certificate for SSL connection
       'wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-2019-root.pem',
 
-      // Get secrets
+      // Get secrets - wait for RDS secret to be populated
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
+      // RDS needs time to populate the secret with actual credentials
       props.database.secrets['postgres']
-        ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json`
+        ? `until aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text | jq -e '.password' > /dev/null 2>&1; do echo "Waiting for RDS to populate secret..."; sleep 10; done && aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json`
         : 'echo \'{"username":"postgres","password":"postgres"}\' > /tmp/db-secrets.json',
       props.database.secrets['documentdb']
         ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json`
         : 'echo "{}" > /tmp/docdb-secrets.json',
       
-      // Extract database credentials
-      'export DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
-      'export DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
-      'export DB_PASS_ENCODED=$(python3 -c "import urllib.parse; import os; print(urllib.parse.quote(os.environ.get(\'DB_PASS\', \'\'), safe=\'\'))")',
-      
-      // Create environment file with actual values using echo
+      // Create environment file with database credentials inline
       'echo "HOST=0.0.0.0" > .env',
       'echo "PORT=3080" >> .env',
       `echo "DOMAIN=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
       'echo "" >> .env',
       'echo "# Database" >> .env',
-      `echo "DATABASE_URL=postgresql://\$DB_USER:\$DB_PASS_ENCODED@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
+      `echo "DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
       'echo "POSTGRES_DB=librechat" >> .env',
-      'echo "POSTGRES_USER=$DB_USER" >> .env',
-      'echo "POSTGRES_PASSWORD=$DB_PASS" >> .env',
+      'echo "POSTGRES_USER=$(cat /tmp/db-secrets.json | jq -r .username)" >> .env',
+      'echo "POSTGRES_PASSWORD=$(cat /tmp/db-secrets.json | jq -r .password)" >> .env',
       `echo "DB_HOST=${props.database.endpoints['postgres']}" >> .env`,
       'echo "DB_PORT=5432" >> .env',
       props.database.endpoints['documentdb']
@@ -275,6 +271,7 @@ export class EC2Deployment extends Construct {
       'echo "" >> .env',
       'echo "# AWS" >> .env',
       `echo "AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}" >> .env`,
+      `echo "BEDROCK_AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}" >> .env`,
       'echo "ENDPOINTS=bedrock" >> .env',
       'echo "" >> .env',
       'echo "# S3" >> .env',
@@ -285,6 +282,8 @@ export class EC2Deployment extends Construct {
       'echo "# Security" >> .env',
       'JWT_SECRET=$(cat /tmp/app-secrets.json | jq -r .jwt_secret || echo "fallback-jwt-secret")',
       'echo "JWT_SECRET=$JWT_SECRET" >> .env',
+      'JWT_REFRESH_SECRET=$(cat /tmp/app-secrets.json | jq -r .jwt_refresh_secret || openssl rand -hex 32)',
+      'echo "JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET" >> .env',
       'CREDS_KEY=$(openssl rand -hex 32)',
       'echo "CREDS_KEY=$CREDS_KEY" >> .env',
       'CREDS_IV=$(openssl rand -hex 16)',
@@ -299,10 +298,13 @@ export class EC2Deployment extends Construct {
       'echo "" >> .env',
       'echo "# RAG Configuration" >> .env',
       `echo "RAG_ENABLED=${props.enableRag}" >> .env`,
+      'echo "RAG_API_URL=http://rag-api:8000" >> .env',
       'echo "EMBEDDINGS_PROVIDER=bedrock" >> .env',
       'echo "EMBEDDINGS_MODEL=amazon.titan-embed-text-v2:0" >> .env',
       'echo "CHUNK_SIZE=1500" >> .env',
       'echo "CHUNK_OVERLAP=200" >> .env',
+      'echo "RAG_TOP_K_RESULTS=5" >> .env',
+      'echo "RAG_SIMILARITY_THRESHOLD=0.7" >> .env',
       'echo "" >> .env',
       'echo "# Meilisearch" >> .env',
       `echo "MEILISEARCH_ENABLED=${props.enableMeilisearch}" >> .env`,
@@ -319,6 +321,10 @@ export class EC2Deployment extends Construct {
       'BING_KEY=$(cat /tmp/app-secrets.json | jq -r ".bing_api_key // empty" || echo "")',
       'echo "BING_API_KEY=$BING_KEY" >> .env',
 
+      // Store database credentials in variables for docker-compose
+      'DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
+      'DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
+      
       // Create docker-compose.yml with actual values substituted
       'cat > docker-compose.yml << EOF',
       'version: "3.8"',
@@ -336,7 +342,8 @@ export class EC2Deployment extends Construct {
       '      - ./logs:/app/api/logs',
       '      - ./uploads:/app/client/public/uploads',
       '    depends_on:',
-      '      - rag-api',
+      '      rag-api:',
+      '        condition: service_healthy',
       props.enableMeilisearch ? '      - meilisearch' : '',
       '',
       '  rag-api:',
@@ -344,8 +351,20 @@ export class EC2Deployment extends Construct {
       '    container_name: rag-api',
       '    restart: unless-stopped',
       '    env_file: .env',
+      '    environment:',
+      `      - DB_HOST=${props.database.endpoints['postgres']}`,
+      '      - DB_PORT=5432',
+      '      - POSTGRES_DB=librechat',
+      '      - POSTGRES_USER=$DB_USER',
+      '      - POSTGRES_PASSWORD=$DB_PASS',
       '    ports:',
       '      - "8000:8000"',
+      '    healthcheck:',
+      '      test: ["CMD-SHELL", "python -c \\"import socket; s=socket.socket(); s.connect((\'localhost\', 8000)); s.close()\\" || exit 1"]',
+      '      interval: 30s',
+      '      timeout: 10s',
+      '      retries: 5',
+      '      start_period: 60s',
       '',
       props.enableMeilisearch
         ? `  meilisearch:
@@ -360,27 +379,16 @@ export class EC2Deployment extends Construct {
 
       // Create LibreChat configuration
       'cat > librechat.yaml << "EOL"',
-      'version: 1.1.5',
+      'version: 1.2.1',
       '',
       'cache: true',
       '',
       'endpoints:',
       '  bedrock:',
-      '    enabled: true',
       '    titleModel: "anthropic.claude-sonnet-4-20250525-v1:0"',
-      '    models:',
-      '      default:',
-      '        - "anthropic.claude-sonnet-4-20250525-v1:0"',
-      '        - "anthropic.claude-opus-4-20250514-v1:0"',
-      '        - "anthropic.claude-3-5-sonnet-20241022-v2:0"',
-      '        - "anthropic.claude-3-haiku-20240307-v1:0"',
-      '        - "amazon.titan-text-premier-v1:0"',
-      '        - "amazon.titan-text-express-v1"',
-      '        - "amazon.titan-text-lite-v1"',
-      '        - "meta.llama3-70b-instruct-v1:0"',
-      '        - "meta.llama3-8b-instruct-v1:0"',
-      '        - "mistral.mistral-large-2407-v1:0"',
-      '        - "mistral.mixtral-8x7b-instruct-v0:1"',
+      '    streamRate: 35',
+      '    availableRegions:',
+      `      - "${cdk.Stack.of(this).region}"`,
       '',
       '  google:',
       '    enabled: true',
@@ -490,8 +498,9 @@ export class EC2Deployment extends Construct {
       'echo "DEBUG: Checking .env file database credentials:" >> /var/log/cloud-init-output.log',
       'grep -E "^(DB_HOST|DB_PORT|POSTGRES_USER|POSTGRES_DB)" .env >> /var/log/cloud-init-output.log',
       'echo "DEBUG: POSTGRES_PASSWORD line exists: $(grep -c "^POSTGRES_PASSWORD=" .env)" >> /var/log/cloud-init-output.log',
-      'docker-compose pull',
-      'docker-compose up -d',
+      'docker compose pull',
+      // Start with new docker compose syntax and proper health checks
+      'docker compose up -d --wait',
       // Wait for containers to start
       'sleep 30',
       // Check container status

@@ -29,6 +29,7 @@ export class DatabaseConstruct extends Construct {
   public readonly endpoints: { [key: string]: string } = {};
   public readonly secrets: { [key: string]: secretsmanager.ISecret } = {};
   public readonly securityGroups: { [key: string]: ec2.ISecurityGroup } = {};
+  public postgresInitResource?: cdk.CustomResource;
 
   // Generate unique suffix for resource names to avoid conflicts
   private readonly uniqueSuffix: string;
@@ -356,6 +357,9 @@ export class DatabaseConstruct extends Construct {
       } else if (this.postgresCluster) {
         initResource.node.addDependency(this.postgresCluster);
       }
+      
+      // Expose the init resource so other constructs can depend on it
+      this.postgresInitResource = initResource;
     }
 
     // Initialize DocumentDB with improved retry logic
