@@ -174,7 +174,7 @@ export class DatabaseConstruct extends Construct {
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_7,
+        version: rds.PostgresEngineVersion.VER_15_5,
       }),
       description: 'Parameter group for LibreChat',
       parameters: {
@@ -186,7 +186,7 @@ export class DatabaseConstruct extends Construct {
     // Create database instance
     this.postgresInstance = new rds.DatabaseInstance(this, 'PostgresInstance', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_7,
+        version: rds.PostgresEngineVersion.VER_15_5,
       }),
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T3,

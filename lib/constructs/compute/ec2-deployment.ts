@@ -221,11 +221,13 @@ export class EC2Deployment extends Construct {
     userData.addCommands(
       // Update system
       'dnf update -y',
-      'dnf install -y docker git htop amazon-cloudwatch-agent postgresql15 python3-pip',
+      'dnf install -y docker git htop amazon-cloudwatch-agent postgresql15 python3-pip jq',
 
       // Install Docker Compose
       'curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
       'chmod +x /usr/local/bin/docker-compose',
+      'ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose',
+
 
       // Start Docker
       'systemctl start docker',
@@ -234,14 +236,15 @@ export class EC2Deployment extends Construct {
 
       // Create app directory
       'mkdir -p /opt/librechat',
+      'chown -R ec2-user:ec2-user /opt/librechat',
       'cd /opt/librechat',
       
       // Create required directories for container volumes
-      'mkdir -p logs uploads',
-      'chmod 777 logs uploads',
+      'mkdir -p logs uploads meili_data mongodb_data',
+      'chown -R ec2-user:ec2-user logs uploads meili_data mongodb_data',
 
       // Download RDS certificate for SSL connection
-      'wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O rds-ca-2019-root.pem',
+      `wget https://truststore.pki.rds.amazonaws.com/${cdk.Stack.of(this).region}/${cdk.Stack.of(this).region}-bundle.pem -O /opt/librechat/rds-ca-2019-root.pem`,
 
       // Get secrets - wait for RDS secret to be populated
       `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
@@ -256,7 +259,8 @@ export class EC2Deployment extends Construct {
       // Create environment file with database credentials inline
       'echo "HOST=0.0.0.0" > .env',
       'echo "PORT=3080" >> .env',
-      `echo "DOMAIN=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
+      `echo "DOMAIN_SERVER=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
+      `echo "DOMAIN_CLIENT=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
       'echo "" >> .env',
       'echo "# Database" >> .env',
       `echo "DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
@@ -270,13 +274,13 @@ export class EC2Deployment extends Construct {
         : 'echo "MONGO_URI=mongodb://mongodb:27017/LibreChat" >> .env',
       'echo "" >> .env',
       'echo "# AWS" >> .env',
-      `echo "AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}" >> .env`,
-      `echo "BEDROCK_AWS_DEFAULT_REGION=${cdk.Stack.of(this).region}" >> .env`,
+      `echo "AWS_REGION=${cdk.Stack.of(this).region}" >> .env`,
+      `echo "BEDROCK_AWS_REGION=${cdk.Stack.of(this).region}" >> .env`,
       'echo "ENDPOINTS=bedrock" >> .env',
       'echo "" >> .env',
       'echo "# S3" >> .env',
-      'echo "CDN_PROVIDER=s3" >> .env',
-      `echo "S3_BUCKET_NAME=${props.storage.s3Bucket.bucketName}" >> .env`,
+      'echo "S3_PROVIDER=s3" >> .env',
+      `echo "S3_BUCKET=${props.storage.s3Bucket.bucketName}" >> .env`,
       `echo "S3_REGION=${cdk.Stack.of(this).region}" >> .env`,
       'echo "" >> .env',
       'echo "# Security" >> .env',
@@ -307,19 +311,19 @@ export class EC2Deployment extends Construct {
       'echo "RAG_SIMILARITY_THRESHOLD=0.7" >> .env',
       'echo "" >> .env',
       'echo "# Meilisearch" >> .env',
-      `echo "MEILISEARCH_ENABLED=${props.enableMeilisearch}" >> .env`,
-      'echo "MEILISEARCH_URL=http://meilisearch:7700" >> .env',
+      `echo "SEARCH_ENABLED=${props.enableMeilisearch}" >> .env`,
+      'echo "MEILI_HOST=http://meilisearch:7700" >> .env',
       'MEILI_KEY=$(openssl rand -hex 32)',
-      'echo "MEILISEARCH_MASTER_KEY=$MEILI_KEY" >> .env',
+      'echo "MEILI_MASTER_KEY=$MEILI_KEY" >> .env',
       'echo "" >> .env',
       'echo "# Web Search (Optional - configure API keys in AWS Secrets Manager)" >> .env',
-      'echo "SEARCH_ENABLED=true" >> .env',
-      'GOOGLE_API=$(cat /tmp/app-secrets.json | jq -r ".google_search_api_key // empty" || echo "")',
-      'echo "GOOGLE_SEARCH_API_KEY=$GOOGLE_API" >> .env',
-      'GOOGLE_CSE=$(cat /tmp/app-secrets.json | jq -r ".google_cse_id // empty" || echo "")',
-      'echo "GOOGLE_CSE_ID=$GOOGLE_CSE" >> .env',
-      'BING_KEY=$(cat /tmp/app-secrets.json | jq -r ".bing_api_key // empty" || echo "")',
-      'echo "BING_API_KEY=$BING_KEY" >> .env',
+      'echo "SEARCH=true" >> .env',
+      'GOOGLE_API_KEY=$(cat /tmp/app-secrets.json | jq -r ".google_search_api_key // empty" || echo "")',
+      'echo "GOOGLE_API_KEY=$GOOGLE_API_KEY" >> .env',
+      'GOOGLE_CSE_ID=$(cat /tmp/app-secrets.json | jq -r ".google_cse_id // empty" || echo "")',
+      'echo "GOOGLE_CSE_ID=$GOOGLE_CSE_ID" >> .env',
+      'BING_API_KEY=$(cat /tmp/app-secrets.json | jq -r ".bing_api_key // empty" || echo "")',
+      'echo "BING_API_KEY=$BING_API_KEY" >> .env',
 
       // Store database credentials in variables for docker-compose
       'DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
@@ -330,10 +334,11 @@ export class EC2Deployment extends Construct {
       'version: "3.8"',
       '',
       'services:',
-      '  librechat:',
+      '  api:',
       '    image: ghcr.io/danny-avila/librechat:latest',
-      '    container_name: librechat',
+      '    container_name: librechat-api',
       '    restart: unless-stopped',
+      '    user: "node"',
       '    env_file: .env',
       '    ports:',
       '      - "3080:3080"',
@@ -342,9 +347,27 @@ export class EC2Deployment extends Construct {
       '      - ./logs:/app/api/logs',
       '      - ./uploads:/app/client/public/uploads',
       '    depends_on:',
-      '      rag-api:',
-      '        condition: service_healthy',
-      props.enableMeilisearch ? '      - meilisearch' : '',
+      '      - mongodb',
+      '      - rag-api',
+      '      - meilisearch',
+      '',
+      '  client:',
+      '    image: ghcr.io/danny-avila/librechat:latest',
+      '    container_name: librechat-client',
+      '    restart: unless-stopped',
+      '    user: "node"',
+      '    env_file: .env',
+      '    ports:',
+      '      - "3090:80"',
+      '    depends_on:',
+      '      - api',
+      '',
+      '  mongodb:',
+      '    image: mongo:latest',
+      '    container_name: mongodb',
+      '    restart: unless-stopped',
+      '    volumes:',
+      '      - ./mongodb_data:/data/db',
       '',
       '  rag-api:',
       '    image: ghcr.io/danny-avila/librechat-rag-api-dev:latest',
@@ -360,32 +383,27 @@ export class EC2Deployment extends Construct {
       '    ports:',
       '      - "8000:8000"',
       '    healthcheck:',
-      '      test: ["CMD-SHELL", "python -c \\"import socket; s=socket.socket(); s.connect((\'localhost\', 8000)); s.close()\\" || exit 1"]',
+      '      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]',
       '      interval: 30s',
       '      timeout: 10s',
       '      retries: 5',
       '      start_period: 60s',
       '',
       props.enableMeilisearch
-        ? `  meilisearch:
-    image: getmeili/meilisearch:v1.6
-    container_name: meilisearch
-    restart: unless-stopped
-    env_file: .env
-    volumes:
-      - ./meili_data:/meili_data`
+        ? `  meilisearch:\n    image: getmeili/meilisearch:v1.6\n    container_name: meilisearch\n    restart: unless-stopped\n    env_file: .env\n    volumes:\n      - ./meili_data:/meili_data`
         : '',
       'EOF',
 
       // Create LibreChat configuration
-      'cat > librechat.yaml << "EOL"',
+      'cat > librechat.yaml << EOL',
       'version: 1.2.1',
       '',
       'cache: true',
       '',
       'endpoints:',
       '  bedrock:',
-      '    titleModel: "anthropic.claude-sonnet-4-20250525-v1:0"',
+      '    enabled: true',
+      '    titleModel: "anthropic.claude-3-sonnet-20240229-v1:0"',
       '    streamRate: 35',
       '    availableRegions:',
       `      - "${cdk.Stack.of(this).region}"`,
@@ -395,7 +413,7 @@ export class EC2Deployment extends Construct {
       '    availableTools: ["google_search"]',
       '',
       '  bing:',
-      '    enabled: true', 
+      '    enabled: true',
       '    availableTools: ["bing_search"]',
       '',
       'fileConfig:',
@@ -423,7 +441,7 @@ export class EC2Deployment extends Construct {
       'rpm -U ./amazon-cloudwatch-agent.rpm',
 
       // Configure CloudWatch agent
-      'cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << "EOL"',
+      'cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOL',
       '{',
       '  "agent": {',
       '    "metrics_collection_interval": 60,',
@@ -508,7 +526,7 @@ export class EC2Deployment extends Construct {
       'docker logs rag-api >> /var/log/cloud-init-output.log 2>&1 || true',
 
       // Create systemd service
-      'cat > /etc/systemd/system/librechat.service << "EOL"',
+      'cat > /etc/systemd/system/librechat.service << EOL',
       '[Unit]',
       'Description=LibreChat Docker Compose Application',
       'Requires=docker.service',
@@ -516,6 +534,7 @@ export class EC2Deployment extends Construct {
       '',
       '[Service]',
       'Type=simple',
+      'User=ec2-user',
       'WorkingDirectory=/opt/librechat',
       'ExecStart=/usr/local/bin/docker-compose up',
       'ExecStop=/usr/local/bin/docker-compose down',
@@ -528,6 +547,7 @@ export class EC2Deployment extends Construct {
 
       'systemctl daemon-reload',
       'systemctl enable librechat.service',
+      'systemctl start librechat.service',
 
       // Clean up
       'rm -f /tmp/app-secrets.json /tmp/db-secrets.json',
