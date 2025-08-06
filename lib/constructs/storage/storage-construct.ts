@@ -102,6 +102,7 @@ export class StorageConstruct extends Construct {
     );
 
     // Create folder structure
+    // Fix: Configure BucketDeployment with encryption to comply with bucket policy
     new s3deploy.BucketDeployment(this, 'CreateFolders', {
       sources: [
         s3deploy.Source.data('uploads/.keep', ''),
@@ -109,7 +110,33 @@ export class StorageConstruct extends Construct {
       ],
       destinationBucket: bucket,
       retainOnDelete: false,
+      // FIX: Add server-side encryption to comply with bucket policy
+      serverSideEncryption: s3deploy.ServerSideEncryption.AES_256,
+      // Performance optimizations
+      memoryLimit: 512,
+      ephemeralStorageSize: cdk.Size.mebibytes(1024),
     });
+
+    // Add exception to bucket policy for BucketDeployment Lambda
+    // This is necessary because BucketDeployment doesn't support custom VPC configuration
+    // and its Lambda function needs to be able to write to the bucket
+    bucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowBucketDeploymentLambda',
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.ServicePrincipal('lambda.amazonaws.com')],
+        actions: ['s3:PutObject', 's3:PutObjectAcl'],
+        resources: [`${bucket.bucketArn}/*`],
+        conditions: {
+          StringEquals: {
+            'aws:SourceAccount': cdk.Stack.of(this).account,
+          },
+          StringLike: {
+            'aws:SourceArn': `arn:aws:lambda:${cdk.Stack.of(this).region}:${cdk.Stack.of(this).account}:function:*`,
+          },
+        },
+      })
+    );
 
     // Add tags
     cdk.Tags.of(bucket).add('Purpose', 'LibreChat-Storage');
