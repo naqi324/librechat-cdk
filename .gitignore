@@ -60,8 +60,7 @@ agents/
 CLAUDE.md
 claude-code-storage/
 claude-instance/
-claude-instance-1/
-claude-instance-2/
+claude-instance*/
 commands/
 hooks/
 .reports/

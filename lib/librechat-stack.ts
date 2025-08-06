@@ -198,7 +198,8 @@ export class LibreChatStack extends cdk.Stack {
       allocatedStorage: props.databaseConfig?.allocatedStorage || 100,
       backupRetentionDays:
         props.databaseConfig?.backupRetentionDays || (props.environment === 'production' ? 7 : 1),
-      enablePgVector: true,
+      enablePgVector: props.enableRag !== false,  // Only enable pgvector if RAG is enabled
+      enableRag: props.enableRag,  // Pass the RAG flag to database construct
       environment: props.environment,
     });
     this.databaseEndpoints = database.endpoints;

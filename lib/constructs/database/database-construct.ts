@@ -19,6 +19,7 @@ export interface DatabaseConstructProps {
   allocatedStorage?: number;
   backupRetentionDays?: number;
   enablePgVector?: boolean;
+  enableRag?: boolean;
   environment: string;
 }
 
@@ -40,19 +41,26 @@ export class DatabaseConstruct extends Construct {
     // Generate unique suffix using environment and a short hash
     this.uniqueSuffix = `${props.environment}-${Date.now().toString(36).slice(-4)}`;
 
-    // Create PostgreSQL database
-    if (props.environment === 'production') {
-      this.createAuroraPostgres(props);
-    } else {
-      this.createRdsPostgres(props);
+    // Create PostgreSQL database only if RAG is enabled
+    // Default to true for backward compatibility
+    const ragEnabled = props.enableRag !== false;
+    
+    if (ragEnabled) {
+      // Create PostgreSQL database
+      if (props.environment === 'production') {
+        this.createAuroraPostgres(props);
+      } else {
+        this.createRdsPostgres(props);
+      }
     }
 
-    // Create DocumentDB if requested
+    // Create DocumentDB if requested (independent of RAG)
     if (props.engine === 'postgres-and-documentdb') {
       this.createDocumentDb(props);
     }
-
-    // Initialize databases
+    
+    // Initialize databases (PostgreSQL and/or DocumentDB)
+    // Only initializes databases that were actually created
     this.initializeDatabases(props);
   }
 
@@ -174,7 +182,7 @@ export class DatabaseConstruct extends Construct {
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_6,
+        version: rds.PostgresEngineVersion.VER_15_5,
       }),
       description: 'Parameter group for LibreChat',
       parameters: {
@@ -186,7 +194,7 @@ export class DatabaseConstruct extends Construct {
     // Create database instance
     this.postgresInstance = new rds.DatabaseInstance(this, 'PostgresInstance', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_6,
+        version: rds.PostgresEngineVersion.VER_15_5,
       }),
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T3,
