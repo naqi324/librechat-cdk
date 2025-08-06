@@ -359,10 +359,39 @@ export class ECSDeployment extends Construct {
             availableRegions: [cdk.Stack.of(this).region],
             models: {
               default: [
-                'anthropic.claude-sonnet-4-20250514-v1:0',     // Claude Sonnet 4.0 (Primary)
-                'anthropic.claude-opus-4-20250514-v1:0',       // Claude Opus 4.0
-                'anthropic.claude-3-5-sonnet-20241022-v2:0',   // Claude 3.5 Sonnet
-                'anthropic.claude-3-5-sonnet-20240620-v1:0',   // Earlier 3.5 Sonnet
+                // Claude 4 Models
+                'anthropic.claude-sonnet-4-20250514-v1:0',     // Claude Sonnet 4 (Default)
+                'anthropic.claude-opus-4-1-20250805-v1:0',     // Claude Opus 4.1
+                'anthropic.claude-opus-4-20250514-v1:0',       // Claude Opus 4
+                // Claude 3.x Models
+                'anthropic.claude-3-7-sonnet-20250219-v1:0',   // Claude 3.7 Sonnet
+                'anthropic.claude-3-5-sonnet-20241022-v2:0',   // Claude 3.5 Sonnet v2
+                'anthropic.claude-3-5-sonnet-20240620-v1:0',   // Claude 3.5 Sonnet
+                'anthropic.claude-3-5-haiku-20241022-v1:0',    // Claude 3.5 Haiku
+                'anthropic.claude-3-opus-20240229-v1:0',       // Claude 3 Opus
+                'anthropic.claude-3-sonnet-20240229-v1:0',     // Claude 3 Sonnet
+                'anthropic.claude-3-haiku-20240307-v1:0',      // Claude 3 Haiku
+                'anthropic.claude-instant-v1',                 // Claude Instant
+                // Meta Llama Models
+                'meta.llama3-1-70b-instruct-v1:0',             // Llama 3.1 70B
+                'meta.llama3-1-8b-instruct-v1:0',              // Llama 3.1 8B
+                'meta.llama3-70b-instruct-v1:0',               // Llama 3 70B
+                'meta.llama3-8b-instruct-v1:0',                // Llama 3 8B
+                // Mistral Models
+                'mistral.mistral-large-2407-v1:0',             // Mistral Large
+                'mistral.mistral-large-2402-v1:0',             // Mistral Large (Previous)
+                'mistral.mixtral-8x7b-instruct-v0:1',          // Mixtral 8x7B
+                'mistral.mistral-7b-instruct-v0:2',            // Mistral 7B
+                // Amazon Titan Models
+                'amazon.titan-text-premier-v1:0',              // Titan Premier
+                'amazon.titan-text-express-v1',                // Titan Express
+                'amazon.titan-text-lite-v1',                   // Titan Lite
+                // Cohere Models
+                'cohere.command-r-plus-v1:0',                  // Command R+
+                'cohere.command-r-v1:0',                        // Command R
+                // AI21 Models
+                'ai21.j2-ultra-v1',                            // Jurassic-2 Ultra
+                'ai21.j2-mid-v1',                              // Jurassic-2 Mid
                 'anthropic.claude-3-5-haiku-20241022-v1:0',    // Claude 3.5 Haiku
                 'anthropic.claude-3-haiku-20240307-v1:0',      // Claude 3 Haiku
                 'anthropic.claude-3-opus-20240229-v1:0',       // Claude 3 Opus

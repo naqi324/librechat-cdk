@@ -1,143 +1,201 @@
-# LibreChat AWS CDK Infrastructure
+# LibreChat CDK Deployment
 
-[![AWS CDK](https://img.shields.io/badge/AWS%20CDK-2.177.0-orange)](https://aws.amazon.com/cdk/)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-Enterprise-grade AWS infrastructure for deploying [LibreChat](https://github.com/danny-avila/LibreChat), an open-source AI chat platform that supports multiple AI providers, user authentication, and conversation management.
-
-## 📋 Table of Contents
-
-- [About](#about)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Documentation](#documentation)
-- [License](#license)
-- [Disclaimer](#disclaimer)
-
-## About
-
-This repository provides AWS CDK (Cloud Development Kit) infrastructure code to deploy LibreChat on AWS with production-ready features, security best practices, and cost optimization. It is not affiliated with the official LibreChat project but is designed to work seamlessly with it.
-
-**LibreChat** is an open-source AI chat application created by [Danny Avila](https://github.com/danny-avila) and licensed under the [MIT License](https://github.com/danny-avila/LibreChat/blob/main/LICENSE). Learn more at:
-- 🌐 [LibreChat Official Website](https://www.librechat.ai/)
-- 📚 [LibreChat Documentation](https://docs.librechat.ai/)
-- 💻 [LibreChat GitHub Repository](https://github.com/danny-avila/LibreChat)
+Enterprise-grade AWS CDK deployment for LibreChat with both EC2 and ECS options.
 
 ## Features
 
-### Infrastructure Features
-- **🎯 Flexible Deployment Modes**: Choose between EC2 (simple, cost-effective) or ECS Fargate (scalable, managed)
-- **🔐 Enterprise Security**: VPC isolation, IAM roles, KMS encryption, security groups, and audit logging
-- **📊 Comprehensive Monitoring**: CloudWatch dashboards, alarms, and centralized logging
-- **💰 Cost Optimized**: Right-sized resources with environment-specific configurations
-- **🔄 High Availability**: Multi-AZ deployments, auto-scaling, and fault tolerance
+✅ **Deployment Options**
+- EC2: Single instance with Docker Compose (cost-effective)
+- ECS: Fargate containers with auto-scaling (production-grade)
 
-### AI & Application Features
-- **🤖 AWS Bedrock Integration**: Native support for Claude, Titan, and Llama models
-- **🔍 RAG Support**: Vector search capabilities with PostgreSQL pgvector
-- **💾 Flexible Storage**: S3 for documents, EFS for shared storage (ECS mode)
-- **🗄️ Database Options**: RDS PostgreSQL with pgvector, optional DocumentDB for MongoDB compatibility
-- **🔎 Search**: Optional Meilisearch integration for full-text search
+✅ **Core Capabilities**
+- **Amazon Bedrock Integration**: Claude Sonnet 4 as default model (with all available Bedrock models)
+- **Optional RAG Pipeline**: PostgreSQL with pgvector when enabled
+- **File Uploads**: Support for documents, images, and data files
+- **Web Search**: Google and Bing search integration
+- **Secure Storage**: S3 for files, Secrets Manager for credentials
 
 ## Quick Start
 
 ### Prerequisites
-
-- AWS Account with appropriate permissions ([see guide](docs/AWS_AUTHENTICATION.md))
-- Node.js 18+ and npm installed
 - AWS CLI configured with credentials
-- AWS Bedrock access enabled in your region
-- EC2 Key Pair (required for EC2 mode only)
+- Node.js 18+ and npm 9+
+- AWS CDK CLI: `npm install -g aws-cdk`
+- EC2 Key Pair (for EC2 deployments)
 
-### Deployment
-
+### 1. Clone and Install
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/librechat-cdk.git
+git clone https://github.com/naqi324/librechat-cdk.git
 cd librechat-cdk
-
-# Install dependencies
 npm install
+```
 
-# Run interactive deployment wizard (recommended)
+### 2. Configure Environment
+```bash
+# For EC2 deployments
+export KEY_PAIR_NAME=your-ec2-key
+
+# Optional configurations
+export ALERT_EMAIL=ops@company.com
+export DOMAIN_NAME=chat.company.com
+```
+
+### 3. Deploy
+
+#### Option A: Interactive Wizard (Recommended)
+```bash
 npm run wizard
 ```
 
-The wizard will guide you through the entire deployment process, including AWS setup, configuration selection, and deployment execution.
+#### Option B: Direct Deployment
+```bash
+# Development with EC2 (minimal, no RAG)
+npm run deploy:dev
 
-For manual deployment options, see the [Quick Reference](QUICK_REFERENCE.md).
+# Production with ECS (full features)
+npm run deploy:prod
+```
+
+## Configuration Options
+
+### Deployment Presets
+
+| Preset | Mode | RAG | Cost/Month | Use Case |
+|--------|------|-----|------------|----------|
+| minimal-dev | EC2 | ❌ | ~$50 | Development, testing |
+| standard-dev | EC2 | ✅ | ~$110 | Development with RAG |
+| production-ec2 | EC2 | ✅ | ~$250 | Small production |
+| production-ecs | ECS | ✅ | ~$450 | Scalable production |
+
+### Custom Configuration
+```bash
+cdk deploy \
+  -c configSource=custom \
+  -c deploymentMode=EC2 \
+  -c enableRag=false \
+  -c enableMeilisearch=false
+```
+
+## Available Models (Bedrock)
+
+**Default**: Claude Sonnet 4 (`anthropic.claude-sonnet-4-20250514-v1:0`)
+
+**Additional Models**:
+- Claude 3 Haiku: `anthropic.claude-3-haiku-20240307-v1:0`
+- Claude Instant: `anthropic.claude-instant-v1`
+- Llama 3.1: `meta.llama3-1-70b-instruct-v1:0`
+- Mistral Large: `mistral.mistral-large-2407-v1:0`
 
 ## Architecture
 
-<details>
-<summary>View Architecture Overview</summary>
+### EC2 Deployment
+- Single EC2 instance running Docker Compose
+- MongoDB for chat storage
+- Optional PostgreSQL for RAG (when enabled)
+- Application Load Balancer
+- Auto-recovery on instance failure
 
-### EC2 Deployment Mode
+### ECS Deployment
+- Fargate containers with auto-scaling
+- Aurora Serverless PostgreSQL (when RAG enabled)
+- MongoDB or DocumentDB
+- Application Load Balancer
+- Multi-AZ for high availability
+
+## Web Search Setup
+
+To enable web search, add API keys to AWS Secrets Manager:
+
+```bash
+aws secretsmanager update-secret \
+  --secret-id librechat-app-secrets \
+  --secret-string '{
+    "google_search_api_key": "YOUR_API_KEY",
+    "google_cse_id": "YOUR_CSE_ID",
+    "bing_api_key": "YOUR_BING_KEY"
+  }'
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Internet  │────▶│     ALB     │────▶│     EC2     │
-└─────────────┘     └─────────────┘     │  Instance   │
-                                        └──────┬──────┘
-                                               │
-                    ┌──────────────────────────┴───────┐
-                    │                                  │
-              ┌─────▼─────┐                    ┌──────▼──────┐
-              │    RDS    │                    │     S3      │
-              │PostgreSQL │                    │   Storage   │
-              └───────────┘                    └─────────────┘
+
+## File Upload Configuration
+
+Files are automatically configured with:
+- Maximum file size: 200MB per file
+- Total size limit: 1GB
+- Supported formats: PDF, Word, Excel, images, CSV, JSON, XML
+
+## Cost Optimization
+
+### Save on Development
+```bash
+# Minimal setup without RAG (~$50/month)
+cdk deploy -c configSource=minimal-dev
 ```
 
-### ECS Deployment Mode
+### Save on Production
+```bash
+# EC2 instead of ECS (~$250 vs ~$450/month)
+cdk deploy -c configSource=production-ec2
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Internet  │────▶│     ALB     │────▶│     ECS     │
-└─────────────┘     └─────────────┘     │   Fargate   │
-                                        └──────┬──────┘
-                                               │
-        ┌──────────────┬───────────────┬───────┴────────┐
-        │              │               │                │
-  ┌─────▼─────┐  ┌────▼─────┐  ┌─────▼─────┐  ┌──────▼──────┐
-  │    RDS    │  │DocumentDB │  │    EFS    │  │     S3      │
-  │PostgreSQL │  │(Optional) │  │  Storage  │  │   Storage   │
-  └───────────┘  └───────────┘  └───────────┘  └─────────────┘
+
+## Management Commands
+
+### Check Status
+```bash
+aws cloudformation describe-stacks \
+  --stack-name LibreChatStack-development
 ```
-</details>
 
-## Documentation
+### View Logs
+```bash
+aws logs tail /aws/librechat --follow
+```
 
-- 📖 **[Quick Reference](QUICK_REFERENCE.md)** - Commands and configuration cheatsheet
-- 📚 **[Documentation Index](docs/README.md)** - Comprehensive guides organized by topic
-- 🏗️ **[Project Structure](PROJECT_STRUCTURE.md)** - Repository organization and file descriptions
-- 🔒 **[Security Guide](docs/SECURITY.md)** - Security best practices and compliance
-- 🔧 **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
+### Update Deployment
+```bash
+cdk diff  # Preview changes
+cdk deploy  # Apply updates
+```
 
-## Contributing
+### Destroy Stack
+```bash
+cdk destroy
+```
 
-We welcome contributions! Please feel free to submit pull requests, report issues, and help improve the project. For questions or discussions, please open an issue on GitHub.
+## Security Features
+
+- 🔒 All data encrypted at rest (S3, RDS, Secrets Manager)
+- 🔒 TLS/SSL for all connections
+- 🔒 IAM roles with least privilege
+- 🔒 Private subnets for databases
+- 🔒 Security groups with minimal access
+- 🔒 Secrets rotation support
+
+## Troubleshooting
+
+### Common Issues
+
+**CDK Bootstrap Required**
+```bash
+cdk bootstrap aws://ACCOUNT-ID/REGION
+```
+
+**EC2 Key Pair Missing**
+```bash
+aws ec2 create-key-pair --key-name my-key \
+  --query 'KeyMaterial' --output text > my-key.pem
+```
+
+**Check Container Logs (EC2)**
+```bash
+ssh -i my-key.pem ec2-user@<instance-ip>
+sudo docker compose logs -f
+```
+
+## Support
+
+- Issues: https://github.com/naqi324/librechat-cdk/issues
+- LibreChat Docs: https://www.librechat.ai/docs
 
 ## License
 
-This infrastructure code is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**Note**: This license applies only to the infrastructure code in this repository. LibreChat itself is a separate project with its own [MIT License](https://github.com/danny-avila/LibreChat/blob/main/LICENSE).
-
-## Disclaimer
-
-**IMPORTANT**: This software is provided "AS IS", without warranty of any kind, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability, whether in an action of contract, tort, or otherwise, arising from, out of, or in connection with the software or the use or other dealings in the software.
-
-**AWS Costs**: You are responsible for all AWS costs incurred by resources created using this infrastructure code. Please review the [cost estimates](QUICK_REFERENCE.md#cost-optimization) and set up billing alerts before deployment.
-
-**Security**: While this infrastructure implements security best practices, you are responsible for:
-- Reviewing and adapting the security configuration to meet your requirements
-- Maintaining and updating the infrastructure
-- Ensuring compliance with your organization's security policies
-- Protecting sensitive data and credentials
-
-**Not Official**: This is not an official LibreChat project. For official LibreChat support, please visit the [LibreChat repository](https://github.com/danny-avila/LibreChat).
-
----
-
-Built with ❤️ using [AWS CDK](https://aws.amazon.com/cdk/) and [TypeScript](https://www.typescriptlang.org/)
+MIT - See LICENSE file for details
