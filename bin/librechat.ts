@@ -24,23 +24,47 @@ let config;
 const configSource = app.node.tryGetContext('configSource') || 'environment';
 
 switch (configSource) {
-  case 'minimal-dev':
-    config = presetConfigs.minimalDev
-      .withKeyPair(app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME!)
-      .build();
+  case 'minimal-dev': {
+    const builder = presetConfigs.minimalDev;
+    const deploymentMode = app.node.tryGetContext('deploymentMode') || process.env.DEPLOYMENT_MODE;
+    if (deploymentMode) {
+      builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
+    }
+    const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
+    if (keyPairName) {
+      builder.withKeyPair(keyPairName);
+    }
+    config = builder.build();
     break;
+  }
 
-  case 'standard-dev':
-    config = presetConfigs.standardDev
-      .withKeyPair(app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME!)
-      .build();
+  case 'standard-dev': {
+    const builder = presetConfigs.standardDev;
+    const deploymentMode = app.node.tryGetContext('deploymentMode') || process.env.DEPLOYMENT_MODE;
+    if (deploymentMode) {
+      builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
+    }
+    const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
+    if (keyPairName) {
+      builder.withKeyPair(keyPairName);
+    }
+    config = builder.build();
     break;
+  }
 
-  case 'full-dev':
-    config = presetConfigs.fullDev
-      .withKeyPair(app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME!)
-      .build();
+  case 'full-dev': {
+    const builder = presetConfigs.fullDev;
+    const deploymentMode = app.node.tryGetContext('deploymentMode') || process.env.DEPLOYMENT_MODE;
+    if (deploymentMode) {
+      builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
+    }
+    const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
+    if (keyPairName) {
+      builder.withKeyPair(keyPairName);
+    }
+    config = builder.build();
     break;
+  }
 
   case 'production-ec2':
     config = presetConfigs.productionEC2

@@ -757,6 +757,10 @@ export class ECSDeployment extends Construct {
 
   private buildDatabaseUrl(props: ECSDeploymentProps): string {
     const endpoint = props.database.endpoints['postgres'];
+    if (!endpoint) {
+      // Return empty string when PostgreSQL is not provisioned (RAG disabled)
+      return '';
+    }
     return `postgresql://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@${endpoint}:5432/librechat?sslmode=require`;
   }
 

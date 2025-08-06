@@ -33,7 +33,9 @@ class CostEstimator {
     const estimates: CostEstimate[] = [];
 
     // EC2/ECS Compute costs
-    if (config.deploymentMode === 'EC2') {
+    // Default to ECS for cost estimation if not specified
+    const deploymentMode = (config as any).deploymentMode || 'ECS';
+    if (deploymentMode === 'EC2') {
       estimates.push(...(await this.estimateEC2Costs(config, environment)));
     } else {
       estimates.push(...(await this.estimateECSCosts(config, environment)));
@@ -267,7 +269,8 @@ class CostEstimator {
     });
 
     // EFS (if using ECS)
-    if (config.deploymentMode === 'ECS') {
+    const deploymentMode = (config as any).deploymentMode || 'ECS';
+    if (deploymentMode === 'ECS') {
       estimates.push({
         service: 'EFS',
         resource: 'Standard Storage',

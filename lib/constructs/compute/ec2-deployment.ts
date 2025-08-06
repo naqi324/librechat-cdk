@@ -299,9 +299,10 @@ export class EC2Deployment extends Construct {
       `echo "DOMAIN_CLIENT=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
       'echo "" >> .env',
       'echo "# Database" >> .env',
-      // Conditional PostgreSQL configuration using environment variables
+      // PostgreSQL configuration - provide defaults when not provisioned
       ...(props.database.endpoints && props.database.endpoints['postgres'] 
         ? [
+            // Use actual PostgreSQL database when provisioned
             `echo "DATABASE_URL=postgresql://\$DB_USER:\$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote('\$DB_PASSWORD', safe=''))")@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
             'echo "POSTGRES_DB=librechat" >> .env',
             'echo "POSTGRES_USER=$DB_USER" >> .env',
@@ -310,7 +311,14 @@ export class EC2Deployment extends Construct {
             'echo "DB_PORT=5432" >> .env',
           ]
         : [
-            'echo "# PostgreSQL not enabled (RAG disabled) - using MongoDB only" >> .env',
+            // Provide placeholder values when PostgreSQL not provisioned (RAG disabled)
+            'echo "# PostgreSQL not enabled (RAG disabled) - using placeholder values" >> .env',
+            'echo "DATABASE_URL=" >> .env',
+            'echo "POSTGRES_DB=" >> .env',
+            'echo "POSTGRES_USER=" >> .env',
+            'echo "POSTGRES_PASSWORD=" >> .env',
+            'echo "DB_HOST=" >> .env',
+            'echo "DB_PORT=" >> .env',
           ]),
       props.database.endpoints['documentdb']
         ? `echo "MONGO_URI=mongodb://\$DOCDB_USER:\$DOCDB_PASSWORD@${props.database.endpoints['documentdb']}:27017/LibreChat?replicaSet=rs0&tls=true&tlsCAFile=/opt/librechat/rds-ca-2019-root.pem&retryWrites=false" >> .env`
@@ -447,7 +455,7 @@ export class EC2Deployment extends Construct {
             '      - DB_PORT=5432',
             '      - POSTGRES_DB=librechat',
             '      - POSTGRES_USER=$DB_USER',
-            '      - POSTGRES_PASSWORD=$DB_PASS',
+            '      - POSTGRES_PASSWORD=$DB_PASSWORD',
             `      - EMBEDDINGS_PROVIDER=bedrock`,
             '      - EMBEDDINGS_MODEL=amazon.titan-embed-text-v2:0',
             `      - BEDROCK_AWS_REGION=${cdk.Stack.of(this).region}`,
@@ -696,8 +704,8 @@ export class EC2Deployment extends Construct {
       'Type=simple',
       'User=ec2-user',
       'WorkingDirectory=/opt/librechat',
-      'ExecStart=/usr/local/bin/docker-compose up',
-      'ExecStop=/usr/local/bin/docker-compose down',
+      'ExecStart=/usr/bin/docker compose up',
+      'ExecStop=/usr/bin/docker compose down',
       'Restart=always',
       'RestartSec=10',
       '',

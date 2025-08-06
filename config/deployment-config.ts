@@ -5,7 +5,7 @@ import { getResourceSizeFromEnv, ResourceSize } from './resource-sizes';
 // Environment-specific configurations
 export const environmentConfigs = {
   development: {
-    deploymentMode: 'EC2' as const,
+    // deploymentMode must be explicitly set by user
     vpcConfig: {
       useExisting: false,
       cidr: '10.0.0.0/16',
@@ -40,7 +40,7 @@ export const environmentConfigs = {
   },
 
   staging: {
-    deploymentMode: 'EC2' as const,
+    // deploymentMode must be explicitly set by user
     vpcConfig: {
       useExisting: false,
       cidr: '10.1.0.0/16',
@@ -148,7 +148,7 @@ export const environmentConfigs = {
 // Default configuration
 export const defaultConfig: Partial<LibreChatStackProps> = {
   environment: 'development',
-  deploymentMode: 'EC2',
+  // deploymentMode is intentionally not set - users must explicitly choose
   allowedIps: process.env.ALLOWED_IPS?.split(',').filter(ip => ip) || 
     (process.env.DEPLOYMENT_ENV === 'development' ? ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] : []), // Dev: private IPs only
   enableAuditLogging: true,
@@ -274,7 +274,32 @@ export class DeploymentConfigBuilder {
     }
 
     if (!this.config.deploymentMode) {
-      throw new Error('Deployment mode is required');
+      throw new Error(`
+Deployment mode is required. You must explicitly choose between EC2 and ECS.
+
+To fix this error, specify the deployment mode using one of these methods:
+
+1. Using the interactive wizard (recommended):
+   ./deploy.sh
+   
+   The wizard will guide you through selecting either EC2 or ECS.
+
+2. Using environment variable:
+   export DEPLOYMENT_MODE=ECS  # or EC2
+   npm run deploy
+
+3. Using CDK context:
+   npm run deploy -- -c deploymentMode=ECS  # or EC2
+
+4. Using .env file:
+   echo "DEPLOYMENT_MODE=ECS" >> .env  # or EC2
+   npm run deploy
+
+EC2 mode: Simple, cost-effective, single instance deployment
+ECS mode: Scalable, production-grade, containerized deployment
+
+For more information, see the README.md or run: npm run wizard
+`);
     }
 
     if (this.config.deploymentMode === 'EC2' && !this.config.keyPairName) {
