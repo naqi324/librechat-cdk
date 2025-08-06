@@ -47,15 +47,46 @@ export class ECSDeployment extends Construct {
     const serviceSecurityGroup = new ec2.SecurityGroup(this, 'ServiceSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for LibreChat ECS services',
-      allowAllOutbound: true,
+      allowAllOutbound: false,
     });
 
-    // Allow internal communication
+    // Add specific egress rules for services
+    serviceSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'HTTPS for external APIs and AWS services'
+    );
+    serviceSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(80),
+      'HTTP for package downloads'
+    );
+    serviceSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'DNS resolution'
+    );
+
+    // Allow specific internal service communication ports
     serviceSecurityGroup.addIngressRule(
       serviceSecurityGroup,
-      ec2.Port.allTraffic(),
-      'Allow internal service communication'
+      ec2.Port.tcp(3080),
+      'LibreChat API'
     );
+    if (props.enableMeilisearch) {
+      serviceSecurityGroup.addIngressRule(
+        serviceSecurityGroup,
+        ec2.Port.tcp(7700),
+        'Meilisearch API'
+      );
+    }
+    if (props.enableRag) {
+      serviceSecurityGroup.addIngressRule(
+        serviceSecurityGroup,
+        ec2.Port.tcp(8000),
+        'RAG API'
+      );
+    }
 
     // Allow EFS mount for services that need it
     props.storage.allowEfsMount(serviceSecurityGroup);
@@ -592,8 +623,15 @@ export class ECSDeployment extends Construct {
     const albSecurityGroup = new ec2.SecurityGroup(this, 'ALBSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for LibreChat ALB',
-      allowAllOutbound: true,
+      allowAllOutbound: false,
     });
+
+    // Add specific egress for ALB to communicate with services
+    albSecurityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(3080),
+      'Communication with LibreChat service'
+    );
 
     albSecurityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP traffic');
 

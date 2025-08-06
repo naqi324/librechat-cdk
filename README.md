@@ -42,18 +42,21 @@ export DOMAIN_NAME=chat.company.com
 
 ### 3. Deploy
 
-#### Option A: Interactive Wizard (Recommended)
 ```bash
-npm run wizard
-```
+# Quick development deployment (no confirmations, minimal cost)
+./deploy.sh --dev --no-rag -y
 
-#### Option B: Direct Deployment
-```bash
-# Development with EC2 (minimal, no RAG)
-npm run deploy:dev
+# Standard development with RAG
+./deploy.sh --dev --rag
 
-# Production with ECS (full features)
-npm run deploy:prod
+# Staging environment
+./deploy.sh --staging
+
+# Production deployment
+./deploy.sh --prod
+
+# See all options
+./deploy.sh --help
 ```
 
 ## Configuration Options

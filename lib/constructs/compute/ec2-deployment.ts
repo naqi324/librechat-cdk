@@ -11,7 +11,6 @@ import { Construct } from 'constructs';
 
 import { DatabaseConstruct } from '../database/database-construct';
 import { StorageConstruct } from '../storage/storage-construct';
-import { buildDocumentDBConnectionTemplate } from '../../utils/connection-strings';
 import {
   createBedrockPolicyStatements,
   createS3PolicyStatements,
@@ -246,15 +245,52 @@ export class EC2Deployment extends Construct {
       // Download RDS certificate for SSL connection
       `wget https://truststore.pki.rds.amazonaws.com/${cdk.Stack.of(this).region}/${cdk.Stack.of(this).region}-bundle.pem -O /opt/librechat/rds-ca-2019-root.pem`,
 
-      // Get secrets - wait for RDS secret to be populated
-      `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.appSecrets.secretArn} --query SecretString --output text > /tmp/app-secrets.json`,
-      // RDS needs time to populate the secret with actual credentials
+      // Create secure credential retrieval script
+      'cat > /opt/librechat/get-credentials.sh << \'SCRIPT_EOF\'',
+      '#!/bin/bash',
+      'set -e',
+      '',
+      '# Function to get secret value',
+      'get_secret() {',
+      '  local secret_id=$1',
+      '  local region=$2',
+      '  aws secretsmanager get-secret-value --region "$region" --secret-id "$secret_id" --query SecretString --output text',
+      '}',
+      '',
+      '# Export credentials as environment variables',
+      `APP_SECRETS=$(get_secret "${props.appSecrets.secretArn}" "${cdk.Stack.of(this).region}")`,
+      'export JWT_SECRET=$(echo "$APP_SECRETS" | jq -r .jwt_secret)',
+      'export CREDS_KEY=$(echo "$APP_SECRETS" | jq -r .creds_key)',
+      'export CREDS_IV=$(echo "$APP_SECRETS" | jq -r .creds_iv)',
+      '',
       props.database.secrets['postgres']
-        ? `until aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text | jq -e '.password' > /dev/null 2>&1; do echo "Waiting for RDS to populate secret..."; sleep 10; done && aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['postgres'].secretArn} --query SecretString --output text > /tmp/db-secrets.json`
-        : 'echo \'{"username":"postgres","password":"postgres"}\' > /tmp/db-secrets.json',
+        ? [
+            '# Wait for RDS credentials to be available',
+            'while true; do',
+            `  DB_SECRETS=$(get_secret "${props.database.secrets['postgres'].secretArn}" "${cdk.Stack.of(this).region}")`,
+            '  if echo "$DB_SECRETS" | jq -e .password > /dev/null 2>&1; then',
+            '    export DB_USER=$(echo "$DB_SECRETS" | jq -r .username)',
+            '    export DB_PASSWORD=$(echo "$DB_SECRETS" | jq -r .password)',
+            '    break',
+            '  fi',
+            '  echo "Waiting for RDS credentials..."',
+            '  sleep 10',
+            'done',
+          ].join('\n')
+        : '# No PostgreSQL configured',
+      '',
       props.database.secrets['documentdb']
-        ? `aws secretsmanager get-secret-value --region ${cdk.Stack.of(this).region} --secret-id ${props.database.secrets['documentdb'].secretArn} --query SecretString --output text > /tmp/docdb-secrets.json`
-        : 'echo "{}" > /tmp/docdb-secrets.json',
+        ? [
+            `DOCDB_SECRETS=$(get_secret "${props.database.secrets['documentdb'].secretArn}" "${cdk.Stack.of(this).region}")`,
+            'export DOCDB_USER=$(echo "$DOCDB_SECRETS" | jq -r .username)',
+            'export DOCDB_PASSWORD=$(echo "$DOCDB_SECRETS" | jq -r .password)',
+          ].join('\n')
+        : '# No DocumentDB configured',
+      'SCRIPT_EOF',
+      'chmod +x /opt/librechat/get-credentials.sh',
+      '',
+      '# Source credentials',
+      'source /opt/librechat/get-credentials.sh',
       
       // Create environment file with database credentials inline
       'echo "HOST=0.0.0.0" > .env',
@@ -263,13 +299,13 @@ export class EC2Deployment extends Construct {
       `echo "DOMAIN_CLIENT=${props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName}" >> .env`,
       'echo "" >> .env',
       'echo "# Database" >> .env',
-      // Conditional PostgreSQL configuration
+      // Conditional PostgreSQL configuration using environment variables
       ...(props.database.endpoints && props.database.endpoints['postgres'] 
         ? [
-            `echo "DATABASE_URL=postgresql://$(cat /tmp/db-secrets.json | jq -r .username):$(cat /tmp/db-secrets.json | jq -r .password | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read().strip(), safe=''))")@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
+            `echo "DATABASE_URL=postgresql://\$DB_USER:\$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote('\$DB_PASSWORD', safe=''))")@${props.database.endpoints['postgres']}:5432/librechat?sslmode=require&sslrootcert=/opt/librechat/rds-ca-2019-root.pem" >> .env`,
             'echo "POSTGRES_DB=librechat" >> .env',
-            'echo "POSTGRES_USER=$(cat /tmp/db-secrets.json | jq -r .username)" >> .env',
-            'echo "POSTGRES_PASSWORD=$(cat /tmp/db-secrets.json | jq -r .password)" >> .env',
+            'echo "POSTGRES_USER=$DB_USER" >> .env',
+            'echo "POSTGRES_PASSWORD=$DB_PASSWORD" >> .env',
             `echo "DB_HOST=${props.database.endpoints['postgres']}" >> .env`,
             'echo "DB_PORT=5432" >> .env',
           ]
@@ -277,7 +313,7 @@ export class EC2Deployment extends Construct {
             'echo "# PostgreSQL not enabled (RAG disabled) - using MongoDB only" >> .env',
           ]),
       props.database.endpoints['documentdb']
-        ? `echo "MONGO_URI=${buildDocumentDBConnectionTemplate(props.database.endpoints['documentdb'])}" >> .env`
+        ? `echo "MONGO_URI=mongodb://\$DOCDB_USER:\$DOCDB_PASSWORD@${props.database.endpoints['documentdb']}:27017/LibreChat?replicaSet=rs0&tls=true&tlsCAFile=/opt/librechat/rds-ca-2019-root.pem&retryWrites=false" >> .env`
         : 'echo "MONGO_URI=mongodb://mongodb:27017/LibreChat" >> .env',
       'echo "" >> .env',
       'echo "# AWS" >> .env',
@@ -291,13 +327,9 @@ export class EC2Deployment extends Construct {
       `echo "S3_REGION=${cdk.Stack.of(this).region}" >> .env`,
       'echo "" >> .env',
       'echo "# Security" >> .env',
-      'JWT_SECRET=$(cat /tmp/app-secrets.json | jq -r .jwt_secret || echo "fallback-jwt-secret")',
       'echo "JWT_SECRET=$JWT_SECRET" >> .env',
-      'JWT_REFRESH_SECRET=$(cat /tmp/app-secrets.json | jq -r .jwt_refresh_secret || openssl rand -hex 32)',
-      'echo "JWT_REFRESH_SECRET=$JWT_REFRESH_SECRET" >> .env',
-      'CREDS_KEY=$(openssl rand -hex 32)',
+      'echo "JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-$(openssl rand -hex 32)}" >> .env',
       'echo "CREDS_KEY=$CREDS_KEY" >> .env',
-      'CREDS_IV=$(openssl rand -hex 16)',
       'echo "CREDS_IV=$CREDS_IV" >> .env',
       'echo "" >> .env',
       'echo "# Features" >> .env',
@@ -329,16 +361,13 @@ export class EC2Deployment extends Construct {
       'echo "" >> .env',
       'echo "# Web Search (Optional - configure API keys in AWS Secrets Manager)" >> .env',
       'echo "SEARCH=true" >> .env',
-      'GOOGLE_API_KEY=$(cat /tmp/app-secrets.json | jq -r ".google_search_api_key // empty" || echo "")',
+      '# Web search API keys from app secrets',
+      'GOOGLE_API_KEY=$(echo "$APP_SECRETS" | jq -r ".google_search_api_key // empty" || echo "")',
       'echo "GOOGLE_API_KEY=$GOOGLE_API_KEY" >> .env',
-      'GOOGLE_CSE_ID=$(cat /tmp/app-secrets.json | jq -r ".google_cse_id // empty" || echo "")',
+      'GOOGLE_CSE_ID=$(echo "$APP_SECRETS" | jq -r ".google_cse_id // empty" || echo "")',
       'echo "GOOGLE_CSE_ID=$GOOGLE_CSE_ID" >> .env',
-      'BING_API_KEY=$(cat /tmp/app-secrets.json | jq -r ".bing_api_key // empty" || echo "")',
+      'BING_API_KEY=$(echo "$APP_SECRETS" | jq -r ".bing_api_key // empty" || echo "")',
       'echo "BING_API_KEY=$BING_API_KEY" >> .env',
-
-      // Store database credentials in variables for docker-compose
-      'DB_USER=$(cat /tmp/db-secrets.json | jq -r .username)',
-      'DB_PASS=$(cat /tmp/db-secrets.json | jq -r .password)',
       
       // Create docker-compose.yml with actual values substituted
       'cat > docker-compose.yml << EOF',
@@ -680,8 +709,8 @@ export class EC2Deployment extends Construct {
       'systemctl enable librechat.service',
       'systemctl start librechat.service',
 
-      // Clean up
-      'rm -f /tmp/app-secrets.json /tmp/db-secrets.json',
+      // Clean up - Note: credentials are now only in environment variables
+      'unset DB_USER DB_PASSWORD DOCDB_USER DOCDB_PASSWORD JWT_SECRET CREDS_KEY CREDS_IV',
 
       // Signal will be handled by cfn-init
       'echo "User data script completed successfully" >> /var/log/cloud-init-output.log'

@@ -75,16 +75,35 @@ export class DatabaseConstruct extends Construct {
       pendingWindow: cdk.Duration.days(30),
     });
 
-    // Grant RDS service access to the key
-    dbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+    // Grant RDS service access to the key (least privilege)
+    dbEncryptionKey.grant(
+      new iam.ServicePrincipal('rds.amazonaws.com'),
+      'kms:Decrypt',
+      'kms:DescribeKey',
+      'kms:GenerateDataKey',
+      'kms:CreateGrant',
+      'kms:RetireGrant'
+    );
 
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for Aurora PostgreSQL',
-      allowAllOutbound: true, // Allow outbound for RDS to communicate with AWS services
+      allowAllOutbound: false
     });
     this.securityGroups['postgres'] = securityGroup;
+
+    // Add specific egress rules for Aurora
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'HTTPS for AWS services'
+    );
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'DNS resolution'
+    );
 
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
@@ -168,16 +187,40 @@ export class DatabaseConstruct extends Construct {
       pendingWindow: cdk.Duration.days(30),
     });
 
-    // Grant RDS service access to the key
-    dbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+    // Grant RDS service access to the key (least privilege)
+    dbEncryptionKey.grant(
+      new iam.ServicePrincipal('rds.amazonaws.com'),
+      'kms:Decrypt',
+      'kms:DescribeKey',
+      'kms:GenerateDataKey',
+      'kms:CreateGrant',
+      'kms:RetireGrant'
+    );
 
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'PostgresSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for RDS PostgreSQL',
-      allowAllOutbound: true, // Allow outbound for RDS to communicate with AWS services
+      allowAllOutbound: false
     });
     this.securityGroups['postgres'] = securityGroup;
+
+    // Add specific egress rules for RDS
+    securityGroup.addEgressRule(
+      ec2.Peer.ipv4('169.254.169.254/32'),
+      ec2.Port.tcp(80),
+      'Allow metadata service access'
+    );
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'HTTPS for AWS services'
+    );
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'DNS resolution'
+    );
 
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
@@ -242,15 +285,34 @@ export class DatabaseConstruct extends Construct {
     });
 
     // Grant DocumentDB service access to the key
-    docdbEncryptionKey.grant(new iam.ServicePrincipal('rds.amazonaws.com'), 'kms:*');
+    docdbEncryptionKey.grant(
+      new iam.ServicePrincipal('rds.amazonaws.com'),
+      'kms:Decrypt',
+      'kms:DescribeKey',
+      'kms:GenerateDataKey',
+      'kms:CreateGrant',
+      'kms:RetireGrant'
+    );
 
     // Create security group
     const securityGroup = new ec2.SecurityGroup(this, 'DocumentDbSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for DocumentDB',
-      allowAllOutbound: true, // Allow outbound for DocumentDB to communicate with AWS services
+      allowAllOutbound: false
     });
     this.securityGroups['documentdb'] = securityGroup;
+
+    // Add specific egress rules for DocumentDB
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.tcp(443),
+      'HTTPS for AWS services'
+    );
+    securityGroup.addEgressRule(
+      ec2.Peer.anyIpv4(),
+      ec2.Port.udp(53),
+      'DNS resolution'
+    );
 
     // Create DocumentDB cluster
     this.documentDbCluster = new docdb.DatabaseCluster(this, 'DocumentDbCluster', {
@@ -309,11 +371,18 @@ export class DatabaseConstruct extends Construct {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
         securityGroups: [
-          new ec2.SecurityGroup(this, 'InitPostgresLambdaSG', {
-            vpc: props.vpc,
-            description: 'Security group for PostgreSQL initialization Lambda',
-            allowAllOutbound: true,
-          }),
+          (() => {
+            const sg = new ec2.SecurityGroup(this, 'InitPostgresLambdaSG', {
+              vpc: props.vpc,
+              description: 'Security group for PostgreSQL initialization Lambda',
+              allowAllOutbound: false,
+            });
+            // Add specific egress for Lambda
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS for AWS services');
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(5432), 'PostgreSQL connection');
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(53), 'DNS resolution');
+            return sg;
+          })(),
         ],
         environment: {
           POSTGRES_SECRET_ARN: this.secrets['postgres'].secretArn,
@@ -386,11 +455,18 @@ export class DatabaseConstruct extends Construct {
           subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
         },
         securityGroups: [
-          new ec2.SecurityGroup(this, 'InitDocSG', {
-            vpc: props.vpc,
-            description: 'Security group for DocumentDB initialization Lambda',
-            allowAllOutbound: true,
-          }),
+          (() => {
+            const sg = new ec2.SecurityGroup(this, 'InitDocSG', {
+              vpc: props.vpc,
+              description: 'Security group for DocumentDB initialization Lambda',
+              allowAllOutbound: false,
+            });
+            // Add specific egress for Lambda
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS for AWS services');
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(27017), 'DocumentDB connection');
+            sg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.udp(53), 'DNS resolution');
+            return sg;
+          })(),
         ],
         environment: {
           DB_SECRET_ID: this.secrets['documentdb'].secretArn,

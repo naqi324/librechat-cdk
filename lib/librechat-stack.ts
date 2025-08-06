@@ -186,6 +186,7 @@ export class LibreChatStack extends cdk.Stack {
       enableEfs: props.deploymentMode === 'ECS',
       vpc: this.vpc,
       enableHipaaCompliance: props.enableHipaaCompliance,
+      domainConfig: props.domainConfig,
     });
     taggingStrategy.applyResourceSpecificTags(storage, 'Storage');
 

@@ -11,6 +11,10 @@ export interface StorageConstructProps {
   enableEfs?: boolean;
   vpc?: ec2.IVpc;
   enableHipaaCompliance?: boolean;
+  domainConfig?: {
+    domainName: string;
+    certificateArn?: string;
+  };
 }
 
 export class StorageConstruct extends Construct {
@@ -46,7 +50,9 @@ export class StorageConstruct extends Construct {
       lifecycleRules: this.getLifecycleRules(props),
       cors: [
         {
-          allowedOrigins: ['*'],
+          allowedOrigins: props.domainConfig?.domainName
+            ? [`https://${props.domainConfig.domainName}`]
+            : ['http://localhost:3080'],
           allowedMethods: [
             s3.HttpMethods.GET,
             s3.HttpMethods.PUT,
@@ -54,8 +60,8 @@ export class StorageConstruct extends Construct {
             s3.HttpMethods.DELETE,
             s3.HttpMethods.HEAD,
           ],
-          allowedHeaders: ['*'],
-          exposedHeaders: ['ETag'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'x-amz-content-sha256', 'x-amz-date', 'x-amz-security-token'],
+          exposedHeaders: ['ETag', 'x-amz-server-side-encryption', 'x-amz-request-id'],
           maxAge: 3000,
         },
       ],
@@ -64,7 +70,8 @@ export class StorageConstruct extends Construct {
       autoDeleteObjects: props.environment !== 'production',
     });
 
-    // Add bucket policy for secure access
+    // Add bucket policies for secure access
+    // Deny non-HTTPS requests
     bucket.addToResourcePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.DENY,
@@ -74,6 +81,21 @@ export class StorageConstruct extends Construct {
         conditions: {
           Bool: {
             'aws:SecureTransport': 'false',
+          },
+        },
+      })
+    );
+
+    // Deny unencrypted uploads
+    bucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.DENY,
+        principals: [new iam.AnyPrincipal()],
+        actions: ['s3:PutObject'],
+        resources: [`${bucket.bucketArn}/*`],
+        conditions: {
+          StringNotEquals: {
+            's3:x-amz-server-side-encryption': 'AES256',
           },
         },
       })
@@ -159,8 +181,11 @@ export class StorageConstruct extends Construct {
     this.efsSecurityGroup = new ec2.SecurityGroup(this, 'EfsSecurityGroup', {
       vpc: props.vpc,
       description: 'Security group for EFS mount targets',
-      allowAllOutbound: true, // Allow outbound for EFS to communicate with AWS services
+      allowAllOutbound: false,
     });
+
+    // EFS mount targets only need to accept inbound NFS traffic
+    // No egress rules needed for EFS mount targets
 
     // Create EFS file system
     this.fileSystem = new efs.FileSystem(this, 'SharedFileSystem', {
