@@ -125,6 +125,25 @@ switch (configSource) {
       builder.withExistingVpc(existingVpcId);
     }
 
+    // Database configuration
+    const postgresVersion = app.node.tryGetContext('postgresVersion');
+    const databaseEngine = app.node.tryGetContext('databaseEngine');
+    const databaseInstanceClass = app.node.tryGetContext('databaseInstanceClass');
+    const databaseAllocatedStorage = app.node.tryGetContext('databaseAllocatedStorage');
+    const databaseBackupRetentionDays = app.node.tryGetContext('databaseBackupRetentionDays');
+    
+    if (postgresVersion || databaseEngine || databaseInstanceClass || databaseAllocatedStorage || databaseBackupRetentionDays) {
+      const databaseConfig: any = {
+        engine: databaseEngine || 'postgres',
+      };
+      if (postgresVersion) databaseConfig.postgresVersion = postgresVersion;
+      if (databaseInstanceClass) databaseConfig.instanceClass = databaseInstanceClass;
+      if (databaseAllocatedStorage) databaseConfig.allocatedStorage = parseInt(databaseAllocatedStorage);
+      if (databaseBackupRetentionDays) databaseConfig.backupRetentionDays = parseInt(databaseBackupRetentionDays);
+      
+      builder.withDatabase(databaseConfig);
+    }
+
     // Features
     const features: Record<string, boolean> = {};
     const enableRag = app.node.tryGetContext('enableRag');

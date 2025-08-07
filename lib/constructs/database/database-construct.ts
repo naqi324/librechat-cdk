@@ -21,6 +21,7 @@ export interface DatabaseConstructProps {
   enablePgVector?: boolean;
   enableRag?: boolean;
   environment: string;
+  postgresVersion?: string;
 }
 
 export class DatabaseConstruct extends Construct {
@@ -62,6 +63,22 @@ export class DatabaseConstruct extends Construct {
     // Initialize databases (PostgreSQL and/or DocumentDB)
     // Only initializes databases that were actually created
     this.initializeDatabases(props);
+  }
+
+  private getPostgresVersion(customVersion?: string): rds.PostgresEngineVersion {
+    if (customVersion) {
+      const majorVersion = customVersion.split('.')[0]!;
+      return rds.PostgresEngineVersion.of(customVersion, majorVersion);
+    }
+    return rds.PostgresEngineVersion.of('15.7', '15');
+  }
+
+  private getAuroraPostgresVersion(customVersion?: string): rds.AuroraPostgresEngineVersion {
+    if (customVersion) {
+      const majorVersion = customVersion.split('.')[0]!;
+      return rds.AuroraPostgresEngineVersion.of(customVersion, majorVersion);
+    }
+    return rds.AuroraPostgresEngineVersion.of('15.7', '15');
   }
 
   private createAuroraPostgres(props: DatabaseConstructProps): void {
@@ -108,7 +125,7 @@ export class DatabaseConstruct extends Construct {
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-                version: rds.AuroraPostgresEngineVersion.VER_15_5,
+                version: this.getAuroraPostgresVersion(props.postgresVersion),
       }),
       description: 'Parameter group for LibreChat',
       parameters: {
@@ -131,7 +148,7 @@ export class DatabaseConstruct extends Construct {
     // Create database cluster
     this.postgresCluster = new rds.DatabaseCluster(this, 'PostgresCluster', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-                version: rds.AuroraPostgresEngineVersion.VER_15_5,
+                version: this.getAuroraPostgresVersion(props.postgresVersion),
       }),
       vpc: props.vpc,
       vpcSubnets: {
@@ -225,7 +242,7 @@ export class DatabaseConstruct extends Construct {
     // Create parameter group for pgvector
     const parameterGroup = new rds.ParameterGroup(this, 'PostgresParameterGroup', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_5,
+        version: this.getPostgresVersion(props.postgresVersion),
       }),
       description: 'Parameter group for LibreChat',
       parameters: {
@@ -237,7 +254,7 @@ export class DatabaseConstruct extends Construct {
     // Create database instance
     this.postgresInstance = new rds.DatabaseInstance(this, 'PostgresInstance', {
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_15_5,
+        version: this.getPostgresVersion(props.postgresVersion),
       }),
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T3,

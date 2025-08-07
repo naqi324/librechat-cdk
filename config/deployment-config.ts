@@ -17,6 +17,7 @@ export const environmentConfigs = {
       instanceClass: 'db.t3.small',
       allocatedStorage: 20,
       backupRetentionDays: 1,
+      postgresVersion: '15.7',
     },
     computeConfig: {
       instanceType: 't3.large',
@@ -52,6 +53,7 @@ export const environmentConfigs = {
       instanceClass: 'db.t3.medium',
       allocatedStorage: 50,
       backupRetentionDays: 7,
+      postgresVersion: '15.7',
     },
     computeConfig: {
       instanceType: 't3.xlarge',
@@ -87,6 +89,7 @@ export const environmentConfigs = {
       instanceClass: 'db.r6g.large',
       allocatedStorage: 100,
       backupRetentionDays: 30,
+      postgresVersion: '15.7',
     },
     computeConfig: {
       instanceType: 't3.2xlarge',

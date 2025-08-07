@@ -45,6 +45,7 @@ export interface LibreChatStackProps extends cdk.StackProps {
     instanceClass?: string;
     allocatedStorage?: number;
     backupRetentionDays?: number;
+    postgresVersion?: string;
   };
 
   // Compute Configuration
@@ -202,6 +203,7 @@ export class LibreChatStack extends cdk.Stack {
       enablePgVector: props.enableRag !== false,  // Only enable pgvector if RAG is enabled
       enableRag: props.enableRag,  // Pass the RAG flag to database construct
       environment: props.environment,
+      postgresVersion: props.databaseConfig?.postgresVersion,
     });
     this.databaseEndpoints = database.endpoints;
     taggingStrategy.applyResourceSpecificTags(database, 'Database');
