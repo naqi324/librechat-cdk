@@ -30,6 +30,7 @@ switch (configSource) {
     if (deploymentMode) {
       builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
     }
+    // Only add key pair if provided (it's optional for ECS)
     const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
     if (keyPairName) {
       builder.withKeyPair(keyPairName);
@@ -44,6 +45,7 @@ switch (configSource) {
     if (deploymentMode) {
       builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
     }
+    // Only add key pair if provided (it's optional for ECS)
     const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
     if (keyPairName) {
       builder.withKeyPair(keyPairName);
@@ -58,6 +60,7 @@ switch (configSource) {
     if (deploymentMode) {
       builder.withDeploymentMode(deploymentMode as 'EC2' | 'ECS');
     }
+    // Only add key pair if provided (it's optional for ECS)
     const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
     if (keyPairName) {
       builder.withKeyPair(keyPairName);
@@ -66,22 +69,30 @@ switch (configSource) {
     break;
   }
 
-  case 'production-ec2':
+  case 'production-ec2': {
+    const keyPairName = app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME;
+    if (!keyPairName) {
+      throw new Error(
+        'production-ec2 preset requires a key pair. Please use ./deploy.sh for interactive setup ' +
+        'or provide KEY_PAIR_NAME environment variable.'
+      );
+    }
     config = presetConfigs.productionEC2
-      .withKeyPair(app.node.tryGetContext('keyPairName') || process.env.KEY_PAIR_NAME!)
-      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL!)
+      .withKeyPair(keyPairName)
+      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL || 'alerts@example.com')
       .build();
     break;
+  }
 
   case 'production-ecs':
     config = presetConfigs.productionECS
-      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL!)
+      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL || 'alerts@example.com')
       .build();
     break;
 
   case 'enterprise':
     config = presetConfigs.enterprise
-      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL!)
+      .withAlertEmail(app.node.tryGetContext('alertEmail') || process.env.ALERT_EMAIL || 'alerts@example.com')
       .build();
     break;
 

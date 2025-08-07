@@ -244,6 +244,14 @@ export class LibreChatStack extends cdk.Stack {
         ec2Props.domainConfig = props.domainConfig;
       }
 
+      // Final validation before creating EC2 deployment
+      if (!ec2Props.keyPairName || ec2Props.keyPairName.trim() === '') {
+        throw new Error(
+          'EC2 deployment requires a valid key pair name. ' +
+          'Please run ./deploy.sh for interactive setup or provide KEY_PAIR_NAME environment variable.'
+        );
+      }
+      
       deployment = new EC2Deployment(this, 'EC2Deployment', ec2Props);
       taggingStrategy.applyResourceSpecificTags(deployment, 'Compute');
       
@@ -344,8 +352,13 @@ export class LibreChatStack extends cdk.Stack {
       throw new Error('environment is required');
     }
 
-    if (props.deploymentMode === 'EC2' && !props.keyPairName) {
-      throw new Error('keyPairName is required for EC2 deployment');
+    if (props.deploymentMode === 'EC2' && (!props.keyPairName || props.keyPairName.trim() === '')) {
+      throw new Error(
+        'keyPairName is required for EC2 deployment. Please provide it via:\n' +
+        '  - Environment variable: export KEY_PAIR_NAME=your-key-name\n' +
+        '  - CDK context: -c keyPairName=your-key-name\n' +
+        '  - Or create a new key pair in AWS EC2 console first'
+      );
     }
 
     if (props.domainConfig && !props.domainConfig.domainName) {

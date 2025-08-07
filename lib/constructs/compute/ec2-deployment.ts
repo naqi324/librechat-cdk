@@ -45,6 +45,14 @@ export class EC2Deployment extends Construct {
   constructor(scope: Construct, id: string, props: EC2DeploymentProps) {
     super(scope, id);
 
+    // Validate required properties
+    if (!props.keyPairName || props.keyPairName.trim() === '') {
+      throw new Error(
+        'EC2Deployment: keyPairName cannot be empty. ' +
+        'Please create an EC2 key pair in AWS console and provide its name.'
+      );
+    }
+
     // Create security groups
     const albSecurityGroup = this.createAlbSecurityGroup(props);
     this.securityGroup = this.createInstanceSecurityGroup(props, albSecurityGroup);

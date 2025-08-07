@@ -305,18 +305,24 @@ For more information, see the README.md or run: npm run wizard
 `);
     }
 
-    if (this.config.deploymentMode === 'EC2' && !this.config.keyPairName) {
+    // Only validate key pair for EC2 mode
+    if (this.config.deploymentMode === 'EC2' && (!this.config.keyPairName || this.config.keyPairName.trim() === '')) {
       throw new Error(`
 Key pair name is required for EC2 deployment.
 
 To fix this error, you can:
 
-1. Create an EC2 key pair in AWS Console:
+1. Use the interactive deployment wizard (recommended):
+   ./deploy.sh
+   
+   The wizard will help you create or select a key pair.
+
+2. Create an EC2 key pair in AWS Console:
    - Go to EC2 > Key Pairs
    - Click "Create key pair"
    - Save the private key file securely
 
-2. Then provide the key pair name using one of these methods:
+3. Then provide the key pair name using one of these methods:
 
    a) Using environment variable:
       export KEY_PAIR_NAME=your-key-pair-name
