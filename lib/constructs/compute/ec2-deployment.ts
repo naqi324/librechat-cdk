@@ -692,14 +692,14 @@ export class EC2Deployment extends Construct {
       'echo "DEBUG: Checking .env file database credentials:" >> /var/log/cloud-init-output.log',
       'grep -E "^(DB_HOST|DB_PORT|POSTGRES_USER|POSTGRES_DB)" .env >> /var/log/cloud-init-output.log',
       'echo "DEBUG: POSTGRES_PASSWORD line exists: $(grep -c "^POSTGRES_PASSWORD=" .env)" >> /var/log/cloud-init-output.log',
-      'docker compose pull',
-      // Start with new docker compose syntax and proper health checks
-      'docker compose up -d --wait',
+      '/usr/local/bin/docker-compose pull',
+      // Start with docker-compose using the correct path
+      '/usr/local/bin/docker-compose up -d',
       // Wait for containers to start
       'sleep 30',
       // Check container status
       'docker ps -a >> /var/log/cloud-init-output.log',
-      'docker logs rag-api >> /var/log/cloud-init-output.log 2>&1 || true',
+      'docker logs librechat-api >> /var/log/cloud-init-output.log 2>&1 || true',
 
       // Create systemd service
       'cat > /etc/systemd/system/librechat.service << EOL',
@@ -712,8 +712,8 @@ export class EC2Deployment extends Construct {
       'Type=simple',
       'User=ec2-user',
       'WorkingDirectory=/opt/librechat',
-      'ExecStart=/usr/bin/docker compose up',
-      'ExecStop=/usr/bin/docker compose down',
+      'ExecStart=/usr/local/bin/docker-compose up',
+      'ExecStop=/usr/local/bin/docker-compose down',
       'Restart=always',
       'RestartSec=10',
       '',
@@ -732,6 +732,9 @@ export class EC2Deployment extends Construct {
       'echo "User data script completed successfully" >> /var/log/cloud-init-output.log'
     );
 
+    // Look up the key pair
+    const keyPair = ec2.KeyPair.fromKeyPairName(this, 'ImportedKeyPair', props.keyPairName);
+    
     const instance = new ec2.Instance(this, 'Instance', {
       vpc: props.vpc,
       instanceType: new ec2.InstanceType(props.instanceType),
@@ -741,7 +744,7 @@ export class EC2Deployment extends Construct {
       },
       securityGroup: this.securityGroup,
       role: role,
-      keyName: props.keyPairName,
+      keyPair: keyPair,  // Use keyPair instead of deprecated keyName
       userData: userData,
       userDataCausesReplacement: false, // Prevent instance replacement on user data changes
       blockDevices: [

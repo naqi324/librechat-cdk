@@ -32,12 +32,9 @@
     "validate": "npm run lint && npm run test && npm run build",
     "estimate-cost": "ts-node scripts/estimate-cost.ts",
     "export-template": "npm run build && cdk synth > cloudformation-template.yaml",
-    "export-all-templates": "npm run build && for stack in $(cdk list); do cdk synth $stack > $stack.yaml; done",
     "check-deps": "npm outdated",
     "update-deps": "npm update",
-    "update-deps:major": "npm-check-updates -u && npm install",
-    "precommit": "npm run validate",
-    "prepare": "husky install"
+    "update-deps:major": "npm-check-updates -u && npm install"
   },
   "dependencies": {
     "aws-cdk-lib": "2.142.1",

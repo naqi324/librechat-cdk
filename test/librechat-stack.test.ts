@@ -29,6 +29,7 @@ describe('LibreChatStack', () => {
 
     beforeEach(() => {
       const config = new DeploymentConfigBuilder('development')
+        .withDeploymentMode('EC2')
         .withKeyPair('test-key')
         .withAllowedIps(['10.0.0.1/32']);
       stack = createStack(config);
@@ -372,6 +373,7 @@ describe('LibreChatStack', () => {
   describe('Feature Flags', () => {
     test('Enables RAG components when flag is set', () => {
       const config = new DeploymentConfigBuilder('development')
+        .withDeploymentMode('EC2')
         .withKeyPair('test-key')
         .withFeatures({ rag: true });
       const stack = createStack(config);
@@ -402,7 +404,9 @@ describe('LibreChatStack', () => {
 
   describe('Stack Outputs', () => {
     test('Creates expected outputs', () => {
-      const config = new DeploymentConfigBuilder('development').withKeyPair('test-key');
+      const config = new DeploymentConfigBuilder('development')
+        .withDeploymentMode('EC2')
+        .withKeyPair('test-key');
       const stack = createStack(config);
       const template = Template.fromStack(stack);
 
@@ -418,7 +422,9 @@ describe('LibreChatStack', () => {
 
   describe('Cost Optimization', () => {
     test('Development uses cost-optimized resources', () => {
-      const config = new DeploymentConfigBuilder('development').withKeyPair('test-key');
+      const config = new DeploymentConfigBuilder('development')
+        .withDeploymentMode('EC2')
+        .withKeyPair('test-key');
       const stack = createStack(config);
       const template = Template.fromStack(stack);
 

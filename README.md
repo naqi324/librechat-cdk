@@ -2,6 +2,14 @@
 
 Enterprise-grade AWS CDK deployment for LibreChat with both EC2 and ECS options.
 
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICK_START.md)** - Get running in 5 minutes
+- **[Project Index](PROJECT_INDEX.md)** - Complete project documentation
+- **[API Reference](API_REFERENCE.md)** - Detailed API documentation
+- **[Project Structure](PROJECT_STRUCTURE.md)** - Architecture overview
+- **[Claude Instructions](CLAUDE.md)** - AI assistant guide
+
 ## Features
 
 ✅ **Deployment Options**
@@ -16,6 +24,8 @@ Enterprise-grade AWS CDK deployment for LibreChat with both EC2 and ECS options.
 - **Secure Storage**: S3 for files, Secrets Manager for credentials
 
 ## Quick Start
+
+> 📖 For detailed instructions, see the [Quick Start Guide](QUICK_START.md)
 
 ### Prerequisites
 - AWS CLI configured with credentials
