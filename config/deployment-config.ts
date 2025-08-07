@@ -20,7 +20,7 @@ export const environmentConfigs = {
       postgresVersion: '15.7',
     },
     computeConfig: {
-      instanceType: 't3.large',
+      instanceType: 't3.large',  // Minimum for LibreChat with containers
       desiredCount: 1,
       cpu: 1024,
       memory: 2048,
@@ -360,11 +360,11 @@ export const presetConfigs = {
     })
     .withDatabase({
       engine: 'postgres' as const, // PostgreSQL only, no DocumentDB
-      instanceClass: 'db.t3.micro',
+      instanceClass: 'db.t3.small',  // t3.micro too small for production use
       allocatedStorage: 20,
       backupRetentionDays: 1,
     })
-    .withCompute({ instanceType: 't3.medium' }),
+    .withCompute({ instanceType: 't3.large' }),  // t3.medium is too small for LibreChat + MongoDB
 
   // Standard development setup
   standardDev: new DeploymentConfigBuilder('development').withFeatures({
@@ -432,7 +432,7 @@ export const presetConfigs = {
     })
     .withDatabase({
       engine: 'postgres' as const, // PostgreSQL only - no DocumentDB
-      instanceClass: 'db.t3.micro',
+      instanceClass: 'db.t3.small',  // t3.micro too small for production use
       allocatedStorage: 20,
       backupRetentionDays: 1,
     })

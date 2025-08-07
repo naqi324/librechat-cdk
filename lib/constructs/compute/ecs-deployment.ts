@@ -340,7 +340,8 @@ export class ECSDeployment extends Construct {
     const environment: { [key: string]: string } = {
       HOST: '0.0.0.0',
       PORT: '3080',
-      DOMAIN: props.domainConfig?.domainName || 'localhost',
+      DOMAIN_CLIENT: props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName,
+      DOMAIN_SERVER: props.domainConfig?.domainName || this.loadBalancer.loadBalancerDnsName,
 
       // Database
       DATABASE_URL: this.buildDatabaseUrl(props),
@@ -506,11 +507,19 @@ export class ECSDeployment extends Construct {
 
     const container = taskDefinition.addContainer('librechat', {
       image: ecs.ContainerImage.fromRegistry('ghcr.io/danny-avila/librechat:latest'),
+      memoryLimitMiB: props.memory || 4096,
+      cpu: props.cpu || 2048,
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: 'librechat',
         logRetention: logs.RetentionDays.ONE_MONTH,
       }),
-      environment,
+      environment: {
+        ...environment,
+        NODE_ENV: 'production',
+        MONGO_URI: props.database.documentDbCluster 
+          ? this.buildMongoUri(props)
+          : 'mongodb://localhost:27017/LibreChat',  // Fallback for local MongoDB sidecar
+      },
       secrets: {
         JWT_SECRET: ecs.Secret.fromSecretsManager(props.appSecrets, 'jwt_secret'),
         CREDS_KEY: ecs.Secret.fromSecretsManager(props.appSecrets, 'creds_key'),

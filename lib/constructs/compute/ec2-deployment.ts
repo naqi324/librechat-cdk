@@ -230,25 +230,35 @@ export class EC2Deployment extends Construct {
       'dnf update -y',
       'dnf install -y docker git htop amazon-cloudwatch-agent postgresql15 python3-pip jq',
 
-      // Install Docker Compose
-      'curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
+      // Install Docker Compose v2 (plugin version)
+      'mkdir -p /usr/local/lib/docker/cli-plugins',
+      'curl -SL "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose',
+      'chmod +x /usr/local/lib/docker/cli-plugins/docker-compose',
+      
+      // Also install standalone for compatibility
+      'curl -SL "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose',
       'chmod +x /usr/local/bin/docker-compose',
-      'ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose',
 
-
-      // Start Docker
+      // Start Docker and ensure it's ready
       'systemctl start docker',
       'systemctl enable docker',
       'usermod -a -G docker ec2-user',
+      
+      // Wait for Docker daemon to be ready
+      'echo "Waiting for Docker daemon to be ready..." >> /var/log/cloud-init-output.log',
+      'for i in {1..30}; do docker info >/dev/null 2>&1 && break || sleep 2; done',
+      'docker info >> /var/log/cloud-init-output.log',
 
       // Create app directory
       'mkdir -p /opt/librechat',
       'chown -R ec2-user:ec2-user /opt/librechat',
       'cd /opt/librechat',
       
-      // Create required directories for container volumes
+      // Create required directories for container volumes with proper permissions
       'mkdir -p logs uploads meili_data mongodb_data',
-      'chown -R ec2-user:ec2-user logs uploads meili_data mongodb_data',
+      'chmod 755 logs uploads meili_data mongodb_data',
+      'chown -R 1000:1000 logs uploads',  // UID 1000 for node user in container
+      'chown -R 999:999 mongodb_data',    // MongoDB container user
 
       // Download RDS certificate for SSL connection
       `wget https://truststore.pki.rds.amazonaws.com/${cdk.Stack.of(this).region}/${cdk.Stack.of(this).region}-bundle.pem -O /opt/librechat/rds-ca-2019-root.pem`,
@@ -385,7 +395,7 @@ export class EC2Deployment extends Construct {
       'BING_API_KEY=$(echo "$APP_SECRETS" | jq -r ".bing_api_key // empty" || echo "")',
       'echo "BING_API_KEY=$BING_API_KEY" >> .env',
       
-      // Create docker-compose.yml with actual values substituted
+      // Create docker-compose.yml with proper configuration
       'cat > docker-compose.yml << EOF',
       'version: "3.8"',
       '',
@@ -394,7 +404,6 @@ export class EC2Deployment extends Construct {
       '    image: ghcr.io/danny-avila/librechat:latest',
       '    container_name: librechat-api',
       '    restart: unless-stopped',
-      '    user: "node"',
       '    env_file: .env',
       '    ports:',
       '      - "3080:3080"',
@@ -402,6 +411,9 @@ export class EC2Deployment extends Construct {
       '      - ./librechat.yaml:/app/librechat.yaml',
       '      - ./logs:/app/api/logs',
       '      - ./uploads:/app/client/public/uploads',
+      '    environment:',
+      '      - NODE_ENV=production',
+      '      - MONGO_URI=mongodb://mongodb:27017/LibreChat',
       '    healthcheck:',
       '      test: ["CMD", "curl", "-f", "http://localhost:3080/health"]',
       '      interval: 30s',
@@ -426,23 +438,16 @@ export class EC2Deployment extends Construct {
           ]
         : []),
       '',
-      '  client:',
-      '    image: ghcr.io/danny-avila/librechat:latest',
-      '    container_name: librechat-client',
-      '    restart: unless-stopped',
-      '    user: "node"',
-      '    env_file: .env',
-      '    ports:',
-      '      - "3090:80"',
-      '    depends_on:',
-      '      - api',
       '',
       '  mongodb:',
-      '    image: mongo:latest',
+      '    image: mongo:7',
       '    container_name: mongodb',
       '    restart: unless-stopped',
+      '    environment:',
+      '      - MONGO_INITDB_DATABASE=LibreChat',
       '    volumes:',
       '      - ./mongodb_data:/data/db',
+      '    command: mongod --noauth',
       '    healthcheck:',
       '      test: ["CMD", "mongosh", "--eval", "db.adminCommand(\'ping\')" ]',
       '      interval: 10s',
@@ -686,20 +691,47 @@ export class EC2Deployment extends Construct {
 
       // Start Docker containers
       'cd /opt/librechat',
-      // Debug: Log credentials (without password value) and verify .env file
-      'echo "DEBUG: DB_USER=$DB_USER" >> /var/log/cloud-init-output.log',
-      'echo "DEBUG: DB_PASS is $([ -n "$DB_PASS" ] && echo "set" || echo "NOT SET")" >> /var/log/cloud-init-output.log',
-      'echo "DEBUG: Checking .env file database credentials:" >> /var/log/cloud-init-output.log',
-      'grep -E "^(DB_HOST|DB_PORT|POSTGRES_USER|POSTGRES_DB)" .env >> /var/log/cloud-init-output.log',
-      'echo "DEBUG: POSTGRES_PASSWORD line exists: $(grep -c "^POSTGRES_PASSWORD=" .env)" >> /var/log/cloud-init-output.log',
-      '/usr/local/bin/docker-compose pull',
-      // Start with docker-compose using the correct path
-      '/usr/local/bin/docker-compose up -d',
-      // Wait for containers to start
-      'sleep 30',
-      // Check container status
+      // Debug: Log configuration
+      'echo "DEBUG: Starting Docker Compose deployment" >> /var/log/cloud-init-output.log',
+      'echo "DEBUG: Docker version:" >> /var/log/cloud-init-output.log',
+      'docker --version >> /var/log/cloud-init-output.log',
+      'echo "DEBUG: Docker Compose version:" >> /var/log/cloud-init-output.log',
+      '/usr/local/bin/docker-compose version >> /var/log/cloud-init-output.log',
+      'echo "DEBUG: Checking .env file:" >> /var/log/cloud-init-output.log',
+      'ls -la /opt/librechat/ >> /var/log/cloud-init-output.log',
+      
+      // Pull images first (with retry logic)
+      'echo "Pulling Docker images..." >> /var/log/cloud-init-output.log',
+      'for i in 1 2 3; do /usr/local/bin/docker-compose pull && break || sleep 10; done',
+      
+      // Start containers with explicit file and project
+      'echo "Starting Docker containers..." >> /var/log/cloud-init-output.log',
+      '/usr/local/bin/docker-compose -f /opt/librechat/docker-compose.yml up -d',
+      
+      // Wait for containers to fully start
+      'sleep 45',
+      
+      // Comprehensive container status check
+      'echo "Container status:" >> /var/log/cloud-init-output.log',
       'docker ps -a >> /var/log/cloud-init-output.log',
-      'docker logs librechat-api >> /var/log/cloud-init-output.log 2>&1 || true',
+      'echo "Docker Compose status:" >> /var/log/cloud-init-output.log',
+      '/usr/local/bin/docker-compose ps >> /var/log/cloud-init-output.log',
+      
+      // Verify MongoDB is ready before checking API
+      'echo "Waiting for MongoDB to be ready..." >> /var/log/cloud-init-output.log',
+      'for i in {1..30}; do',
+      '  if docker exec mongodb mongosh --eval "db.adminCommand(\'ping\')" >/dev/null 2>&1; then',
+      '    echo "MongoDB is ready" >> /var/log/cloud-init-output.log',
+      '    break',
+      '  fi',
+      '  sleep 2',
+      'done',
+      
+      // Check logs for each service
+      'echo "MongoDB logs:" >> /var/log/cloud-init-output.log',
+      'docker logs mongodb 2>&1 | tail -20 >> /var/log/cloud-init-output.log || true',
+      'echo "LibreChat API logs:" >> /var/log/cloud-init-output.log',
+      'docker logs librechat-api 2>&1 | tail -50 >> /var/log/cloud-init-output.log || true',
 
       // Create systemd service
       'cat > /etc/systemd/system/librechat.service << EOL',
@@ -709,13 +741,14 @@ export class EC2Deployment extends Construct {
       'After=docker.service',
       '',
       '[Service]',
-      'Type=simple',
-      'User=ec2-user',
+      'Type=forking',
+      'User=root',
       'WorkingDirectory=/opt/librechat',
-      'ExecStart=/usr/local/bin/docker-compose up',
+      'ExecStartPre=/usr/local/bin/docker-compose down',
+      'ExecStart=/usr/local/bin/docker-compose up -d',
       'ExecStop=/usr/local/bin/docker-compose down',
       'Restart=always',
-      'RestartSec=10',
+      'RestartSec=30',
       '',
       '[Install]',
       'WantedBy=multi-user.target',
@@ -725,6 +758,23 @@ export class EC2Deployment extends Construct {
       'systemctl enable librechat.service',
       'systemctl start librechat.service',
 
+      // Verify containers are running
+      'echo "Verifying LibreChat deployment..." >> /var/log/cloud-init-output.log',
+      'sleep 10',
+      'RETRY_COUNT=0',
+      'while [ $RETRY_COUNT -lt 5 ]; do',
+      '  if curl -f http://localhost:3080/health >/dev/null 2>&1; then',
+      '    echo "LibreChat is running and healthy!" >> /var/log/cloud-init-output.log',
+      '    break',
+      '  else',
+      '    echo "LibreChat not ready yet, retrying in 30 seconds..." >> /var/log/cloud-init-output.log',
+      '    docker ps -a >> /var/log/cloud-init-output.log',
+      '    docker logs librechat-api 2>&1 | tail -20 >> /var/log/cloud-init-output.log || true',
+      '    sleep 30',
+      '    RETRY_COUNT=$((RETRY_COUNT + 1))',
+      '  fi',
+      'done',
+      
       // Clean up - Note: credentials are now only in environment variables
       'unset DB_USER DB_PASSWORD DOCDB_USER DOCDB_PASSWORD JWT_SECRET CREDS_KEY CREDS_IV',
 
