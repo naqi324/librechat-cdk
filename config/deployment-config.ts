@@ -10,7 +10,7 @@ export const environmentConfigs = {
       useExisting: false,
       cidr: '10.0.0.0/16',
       maxAzs: 2,
-      natGateways: 0, // Cost savings for dev
+      natGateways: 0, // No NAT gateways for development
     },
     databaseConfig: {
       engine: 'postgres' as const, // Removed DocumentDB to avoid Lambda connectivity issues
@@ -33,7 +33,6 @@ export const environmentConfigs = {
     enableHipaaCompliance: false,
     tagConfig: {
       owner: 'DevOps',
-      costCenter: 'Engineering',
       project: 'LibreChat-Dev',
       dataClassification: 'Internal',
       compliance: 'None',
@@ -69,7 +68,6 @@ export const environmentConfigs = {
     enableHipaaCompliance: false,
     tagConfig: {
       owner: 'DevOps',
-      costCenter: 'Engineering',
       project: 'LibreChat',
       dataClassification: 'Confidential',
       compliance: 'SOC2',
@@ -105,7 +103,6 @@ export const environmentConfigs = {
     enableHipaaCompliance: true,
     tagConfig: {
       owner: 'DevOps',
-      costCenter: 'Engineering', 
       project: 'LibreChat',
       dataClassification: 'PHI',
       compliance: 'HIPAA',
@@ -140,7 +137,6 @@ export const environmentConfigs = {
     enableHipaaCompliance: true,
     tagConfig: {
       owner: 'Security',
-      costCenter: 'Compliance',
       project: 'LibreChat-HIPAA',
       dataClassification: 'PHI',
       compliance: 'HIPAA',
@@ -298,7 +294,7 @@ To fix this error, specify the deployment mode using one of these methods:
    echo "DEPLOYMENT_MODE=ECS" >> .env  # or EC2
    npm run deploy
 
-EC2 mode: Simple, cost-effective, single instance deployment
+EC2 mode: Simple single instance deployment
 ECS mode: Scalable, production-grade, containerized deployment
 
 For more information, see the README.md or run: npm run wizard
@@ -356,7 +352,7 @@ export const presetConfigs = {
       useExisting: false,
       cidr: '10.0.0.0/16',
       maxAzs: 2,
-      natGateways: 0, // No NAT gateways for cost savings
+      natGateways: 0, // No NAT gateways
     })
     .withDatabase({
       engine: 'postgres' as const, // PostgreSQL only, no DocumentDB
@@ -377,7 +373,7 @@ export const presetConfigs = {
     .withFeatures({ rag: true, meilisearch: true })
     .withCompute({ instanceType: 't3.xlarge' }),
 
-  // Production EC2 (cost-optimized)
+  // Production EC2
   productionEC2: new DeploymentConfigBuilder('production')
     .withDeploymentMode('EC2')
     .withCompute({ instanceType: 't3.xlarge' })

@@ -13,8 +13,8 @@ Enterprise-grade AWS CDK deployment for LibreChat with both EC2 and ECS options.
 ## Features
 
 ✅ **Deployment Options**
-- EC2: Single instance with Docker Compose (cost-effective)
-- ECS: Fargate containers with auto-scaling (production-grade)
+- EC2: Single instance with Docker Compose
+- ECS: Fargate containers with auto-scaling
 
 ✅ **Core Capabilities**
 - **Amazon Bedrock Integration**: Claude Sonnet 4 as default model (with all available Bedrock models)
@@ -53,7 +53,7 @@ export DOMAIN_NAME=chat.company.com
 ### 3. Deploy
 
 ```bash
-# Quick development deployment (no confirmations, minimal cost)
+# Quick development deployment (no confirmations)
 ./deploy.sh --dev --no-rag -y
 
 # Standard development with RAG
@@ -73,12 +73,12 @@ export DOMAIN_NAME=chat.company.com
 
 ### Deployment Presets
 
-| Preset | Mode | RAG | Cost/Month | Use Case |
-|--------|------|-----|------------|----------|
-| minimal-dev | EC2 | ❌ | ~$50 | Development, testing |
-| standard-dev | EC2 | ✅ | ~$110 | Development with RAG |
-| production-ec2 | EC2 | ✅ | ~$250 | Small production |
-| production-ecs | ECS | ✅ | ~$450 | Scalable production |
+| Preset | Mode | RAG | Use Case |
+|--------|------|-----|----------|
+| minimal-dev | EC2 | ❌ | Development, testing |
+| standard-dev | EC2 | ✅ | Development with RAG |
+| production-ec2 | EC2 | ✅ | Small production |
+| production-ecs | ECS | ✅ | Scalable production |
 
 ### Custom Configuration
 ```bash
@@ -136,17 +136,17 @@ Files are automatically configured with:
 - Total size limit: 1GB
 - Supported formats: PDF, Word, Excel, images, CSV, JSON, XML
 
-## Cost Optimization
+## Deployment Tips
 
-### Save on Development
+### Development
 ```bash
-# Minimal setup without RAG (~$50/month)
+# Minimal setup without RAG
 cdk deploy -c configSource=minimal-dev
 ```
 
-### Save on Production
+### Production
 ```bash
-# EC2 instead of ECS (~$250 vs ~$450/month)
+# EC2 deployment
 cdk deploy -c configSource=production-ec2
 ```
 

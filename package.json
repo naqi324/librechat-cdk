@@ -30,7 +30,6 @@
     "format": "prettier --write '**/*.{ts,js,json,md}'",
     "format:check": "prettier --check '**/*.{ts,js,json,md}'",
     "validate": "npm run lint && npm run test && npm run build",
-    "estimate-cost": "ts-node scripts/estimate-cost.ts",
     "export-template": "npm run build && cdk synth > cloudformation-template.yaml",
     "check-deps": "npm outdated",
     "update-deps": "npm update",
@@ -43,7 +42,6 @@
   },
   "devDependencies": {
     "@aws-sdk/client-ec2": "^3.540.0",
-    "@aws-sdk/client-pricing": "^3.540.0",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.11.17",
     "@typescript-eslint/eslint-plugin": "^6.21.0",

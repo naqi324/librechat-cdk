@@ -11,7 +11,6 @@ Welcome to the LibreChat CDK documentation. This guide will help you deploy and 
 ### Deployment Guides
 - [**AWS Authentication**](./AWS_AUTHENTICATION.md) - Setting up AWS credentials and permissions
 - [**Local Testing Guide**](./LOCAL_TESTING_GUIDE.md) - Development and testing locally
-- [**Deployment Optimization**](./DEPLOYMENT_OPTIMIZATION.md) - Cost and performance optimization
 - [**Network Architecture**](./NETWORK_ARCHITECTURE.md) - VPC and networking details
 
 ### Configuration
@@ -40,11 +39,6 @@ Welcome to the LibreChat CDK documentation. This guide will help you deploy and 
 1. Follow the [Local Testing Guide](./LOCAL_TESTING_GUIDE.md)
 2. Use `docker-compose up` for local development
 
-#### Optimize Costs
-1. Read [Deployment Optimization](./DEPLOYMENT_OPTIMIZATION.md)
-2. Use minimal configurations for development
-3. Consider EC2 mode for production cost savings
-
 #### Fix Issues
 1. Check [Troubleshooting Guide](./TROUBLESHOOTING.md)
 2. Review CloudFormation events in AWS Console
@@ -57,7 +51,7 @@ Welcome to the LibreChat CDK documentation. This guide will help you deploy and 
 ## 📋 Configuration Reference
 
 ### Deployment Modes
-- **EC2**: Simple, cost-effective, SSH access
+- **EC2**: Simple single instance, SSH access
 - **ECS**: Scalable, managed, production-grade
 
 ### Environment Presets

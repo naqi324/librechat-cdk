@@ -74,7 +74,6 @@ export interface LibreChatStackProps extends cdk.StackProps {
   // Tagging Configuration
   tagConfig?: {
     owner?: string;
-    costCenter?: string;
     project?: string;
     dataClassification?: string;
     compliance?: string;
@@ -98,7 +97,6 @@ export class LibreChatStack extends cdk.Stack {
       Application: 'LibreChat',
       Environment: props.environment,
       Owner: props.tagConfig?.owner || 'DevOps',
-      CostCenter: props.tagConfig?.costCenter || 'AI-Platform',
       Project: props.tagConfig?.project || 'LibreChat-CDK',
       DataClassification: props.tagConfig?.dataClassification || 'Confidential',
       Compliance: props.tagConfig?.compliance || (props.enableHipaaCompliance ? 'HIPAA' : 'None'),
@@ -336,10 +334,10 @@ export class LibreChatStack extends cdk.Stack {
     // Create outputs
     this.createOutputs(deployment, database);
 
-    // Add cost allocation tags to CloudFormation outputs
-    new cdk.CfnOutput(this, 'CostAllocationTags', {
-      value: JSON.stringify(taggingStrategy.getCostAllocationTags()),
-      description: 'Tags that should be activated for cost allocation in AWS Billing',
+    // Add resource tracking tags to CloudFormation outputs
+    new cdk.CfnOutput(this, 'ResourceTrackingTags', {
+      value: JSON.stringify(taggingStrategy.getResourceTrackingTags()),
+      description: 'Tags used for resource tracking and management',
     });
   }
 

@@ -8,7 +8,6 @@ export interface StandardTags {
   Application: string;
   Environment: string;
   Owner?: string;
-  CostCenter?: string;
   Project?: string;
   DataClassification?: string;
   Compliance?: string;
@@ -58,9 +57,6 @@ export class TaggingStrategy {
     // Optional standard tags
     if (standardTags.Owner) {
       cdk.Tags.of(construct).add('Owner', standardTags.Owner);
-    }
-    if (standardTags.CostCenter) {
-      cdk.Tags.of(construct).add('CostCenter', standardTags.CostCenter);
     }
     if (standardTags.Project) {
       cdk.Tags.of(construct).add('Project', standardTags.Project);
@@ -171,13 +167,12 @@ export class TaggingStrategy {
   }
 
   /**
-   * Create a tag-based cost allocation report configuration
+   * Get resource tracking tags
    */
-  public getCostAllocationTags(): string[] {
+  public getResourceTrackingTags(): string[] {
     return [
       'Application',
       'Environment',
-      'CostCenter',
       'Project',
       'Owner',
       'DeploymentMode',
