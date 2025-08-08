@@ -249,16 +249,17 @@ export class EC2Deployment extends Construct {
       'for i in {1..30}; do docker info >/dev/null 2>&1 && break || sleep 2; done',
       'docker info >> /var/log/cloud-init-output.log',
 
-      // Create app directory
-      'mkdir -p /opt/librechat',
-      'chown -R ec2-user:ec2-user /opt/librechat',
+      // Clone LibreChat repository for proper setup
+      'echo "Cloning LibreChat repository..." >> /var/log/cloud-init-output.log',
+      'cd /opt',
+      'git clone --depth 1 https://github.com/danny-avila/LibreChat.git librechat',
       'cd /opt/librechat',
       
       // Create required directories for container volumes with proper permissions
-      'mkdir -p logs uploads meili_data mongodb_data',
-      'chmod 755 logs uploads meili_data mongodb_data',
-      'chown -R 1000:1000 logs uploads',  // UID 1000 for node user in container
-      'chown -R 999:999 mongodb_data',    // MongoDB container user
+      'mkdir -p logs images uploads meili_data mongodb_data data-node',
+      'chmod 755 logs images uploads meili_data mongodb_data data-node',
+      'chown -R 1000:1000 logs uploads images',  // UID 1000 for node user in container
+      'chown -R 999:999 mongodb_data data-node',    // MongoDB container user
 
       // Download RDS certificate for SSL connection
       `wget https://truststore.pki.rds.amazonaws.com/${cdk.Stack.of(this).region}/${cdk.Stack.of(this).region}-bundle.pem -O /opt/librechat/rds-ca-2019-root.pem`,
@@ -401,7 +402,7 @@ export class EC2Deployment extends Construct {
       '',
       'services:',
       '  api:',
-      '    image: ghcr.io/danny-avila/librechat:latest',
+      '    image: ghcr.io/danny-avila/librechat-dev-api:latest',
       '    container_name: librechat-api',
       '    restart: unless-stopped',
       '    env_file: .env',
@@ -410,19 +411,27 @@ export class EC2Deployment extends Construct {
       '    volumes:',
       '      - ./librechat.yaml:/app/librechat.yaml',
       '      - ./logs:/app/api/logs',
+      '      - ./images:/app/client/public/images',
       '      - ./uploads:/app/client/public/uploads',
       '    environment:',
       '      - NODE_ENV=production',
-      '      - MONGO_URI=mongodb://mongodb:27017/LibreChat',
+      '      - HOST=0.0.0.0',
+      '      - PORT=3080',
+      '      - MONGO_URI=${MONGO_URI:-mongodb://mongodb:27017/LibreChat}',
       '    healthcheck:',
       '      test: ["CMD", "curl", "-f", "http://localhost:3080/health"]',
       '      interval: 30s',
       '      timeout: 10s',
-      '      retries: 3',
-      '      start_period: 40s',
+      '      retries: 5',
+      '      start_period: 60s',
       '    depends_on:',
-      '      mongodb:',
-      '        condition: service_started',
+      // Only depend on mongodb if it's not using DocumentDB
+      ...(props.database.endpoints['documentdb']
+        ? []
+        : [
+            '      mongodb:',
+            '        condition: service_started',
+          ]),
       // Conditional RAG API dependency
       ...(props.database.endpoints && props.database.endpoints['postgres']
         ? [
@@ -439,22 +448,30 @@ export class EC2Deployment extends Construct {
         : []),
       '',
       '',
-      '  mongodb:',
-      '    image: mongo:7',
-      '    container_name: mongodb',
-      '    restart: unless-stopped',
-      '    environment:',
-      '      - MONGO_INITDB_DATABASE=LibreChat',
-      '    volumes:',
-      '      - ./mongodb_data:/data/db',
-      '    command: mongod --noauth',
-      '    healthcheck:',
-      '      test: ["CMD", "mongosh", "--eval", "db.adminCommand(\'ping\')" ]',
-      '      interval: 10s',
-      '      timeout: 5s',
-      '      retries: 5',
-      '      start_period: 20s',
-      '',
+      // Only include MongoDB container if DocumentDB is NOT provisioned
+      ...(props.database.endpoints['documentdb']
+        ? [
+            '  # Using AWS DocumentDB - no local MongoDB container needed',
+            '',
+          ]
+        : [
+            '  mongodb:',
+            '    image: mongo:7',
+            '    container_name: mongodb',
+            '    restart: unless-stopped',
+            '    environment:',
+            '      - MONGO_INITDB_DATABASE=LibreChat',
+            '    volumes:',
+            '      - ./data-node:/data/db',
+            '    command: mongod --noauth',
+            '    healthcheck:',
+            '      test: ["CMD", "mongosh", "--eval", "db.adminCommand(\'ping\')" ]',
+            '      interval: 10s',
+            '      timeout: 5s',
+            '      retries: 5',
+            '      start_period: 30s',
+            '',
+          ]),
       // Conditional RAG API service - only when PostgreSQL is available
       ...(props.database.endpoints && props.database.endpoints['postgres']
         ? [
@@ -696,20 +713,38 @@ export class EC2Deployment extends Construct {
       'echo "DEBUG: Docker version:" >> /var/log/cloud-init-output.log',
       'docker --version >> /var/log/cloud-init-output.log',
       'echo "DEBUG: Docker Compose version:" >> /var/log/cloud-init-output.log',
-      '/usr/local/bin/docker-compose version >> /var/log/cloud-init-output.log',
-      'echo "DEBUG: Checking .env file:" >> /var/log/cloud-init-output.log',
+      'docker compose version >> /var/log/cloud-init-output.log 2>&1 || /usr/local/bin/docker-compose version >> /var/log/cloud-init-output.log',
+      'echo "DEBUG: Checking configuration files:" >> /var/log/cloud-init-output.log',
       'ls -la /opt/librechat/ >> /var/log/cloud-init-output.log',
+      'echo "DEBUG: .env file preview:" >> /var/log/cloud-init-output.log',
+      'head -20 /opt/librechat/.env | sed "s/PASSWORD=.*/PASSWORD=***/" >> /var/log/cloud-init-output.log',
       
       // Pull images first (with retry logic)
       'echo "Pulling Docker images..." >> /var/log/cloud-init-output.log',
-      'for i in 1 2 3; do /usr/local/bin/docker-compose pull && break || sleep 10; done',
+      'for i in 1 2 3; do',
+      '  if docker compose pull 2>/dev/null; then',
+      '    echo "Images pulled successfully using docker compose" >> /var/log/cloud-init-output.log',
+      '    break',
+      '  elif /usr/local/bin/docker-compose pull; then',
+      '    echo "Images pulled successfully using docker-compose standalone" >> /var/log/cloud-init-output.log',
+      '    break',
+      '  else',
+      '    echo "Pull attempt $i failed, retrying..." >> /var/log/cloud-init-output.log',
+      '    sleep 10',
+      '  fi',
+      'done',
       
-      // Start containers with explicit file and project
+      // Start containers with better error handling
       'echo "Starting Docker containers..." >> /var/log/cloud-init-output.log',
-      '/usr/local/bin/docker-compose -f /opt/librechat/docker-compose.yml up -d',
+      'if docker compose up -d 2>/dev/null; then',
+      '  echo "Containers started with docker compose" >> /var/log/cloud-init-output.log',
+      'else',
+      '  echo "Trying docker-compose standalone..." >> /var/log/cloud-init-output.log',
+      '  /usr/local/bin/docker-compose up -d',
+      'fi',
       
       // Wait for containers to fully start
-      'sleep 45',
+      'sleep 60',
       
       // Comprehensive container status check
       'echo "Container status:" >> /var/log/cloud-init-output.log',
@@ -717,19 +752,29 @@ export class EC2Deployment extends Construct {
       'echo "Docker Compose status:" >> /var/log/cloud-init-output.log',
       '/usr/local/bin/docker-compose ps >> /var/log/cloud-init-output.log',
       
-      // Verify MongoDB is ready before checking API
-      'echo "Waiting for MongoDB to be ready..." >> /var/log/cloud-init-output.log',
-      'for i in {1..30}; do',
-      '  if docker exec mongodb mongosh --eval "db.adminCommand(\'ping\')" >/dev/null 2>&1; then',
-      '    echo "MongoDB is ready" >> /var/log/cloud-init-output.log',
-      '    break',
-      '  fi',
-      '  sleep 2',
-      'done',
+      // Verify MongoDB is ready before checking API (only if using local MongoDB)
+      ...(props.database.endpoints['documentdb']
+        ? [
+            'echo "Using AWS DocumentDB - no local MongoDB to wait for" >> /var/log/cloud-init-output.log',
+          ]
+        : [
+            'echo "Waiting for MongoDB to be ready..." >> /var/log/cloud-init-output.log',
+            'for i in {1..30}; do',
+            '  if docker exec mongodb mongosh --eval "db.adminCommand(\'ping\')" >/dev/null 2>&1; then',
+            '    echo "MongoDB is ready" >> /var/log/cloud-init-output.log',
+            '    break',
+            '  fi',
+            '  sleep 2',
+            'done',
+          ]),
       
       // Check logs for each service
-      'echo "MongoDB logs:" >> /var/log/cloud-init-output.log',
-      'docker logs mongodb 2>&1 | tail -20 >> /var/log/cloud-init-output.log || true',
+      ...(props.database.endpoints['documentdb']
+        ? []
+        : [
+            'echo "MongoDB logs:" >> /var/log/cloud-init-output.log',
+            'docker logs mongodb 2>&1 | tail -20 >> /var/log/cloud-init-output.log || true',
+          ]),
       'echo "LibreChat API logs:" >> /var/log/cloud-init-output.log',
       'docker logs librechat-api 2>&1 | tail -50 >> /var/log/cloud-init-output.log || true',
 
@@ -738,17 +783,23 @@ export class EC2Deployment extends Construct {
       '[Unit]',
       'Description=LibreChat Docker Compose Application',
       'Requires=docker.service',
-      'After=docker.service',
+      'After=docker.service network-online.target',
+      'Wants=network-online.target',
       '',
       '[Service]',
-      'Type=forking',
+      'Type=oneshot',
+      'RemainAfterExit=yes',
       'User=root',
       'WorkingDirectory=/opt/librechat',
-      'ExecStartPre=/usr/local/bin/docker-compose down',
-      'ExecStart=/usr/local/bin/docker-compose up -d',
-      'ExecStop=/usr/local/bin/docker-compose down',
-      'Restart=always',
+      'EnvironmentFile=/opt/librechat/.env',
+      'ExecStartPre=-/usr/bin/docker compose down',
+      'ExecStartPre=-/usr/local/bin/docker-compose down',
+      'ExecStart=/bin/bash -c "docker compose up -d || /usr/local/bin/docker-compose up -d"',
+      'ExecStop=/bin/bash -c "docker compose down || /usr/local/bin/docker-compose down"',
+      'ExecReload=/bin/bash -c "docker compose restart || /usr/local/bin/docker-compose restart"',
+      'Restart=on-failure',
       'RestartSec=30',
+      'TimeoutStartSec=300',
       '',
       '[Install]',
       'WantedBy=multi-user.target',
@@ -760,20 +811,61 @@ export class EC2Deployment extends Construct {
 
       // Verify containers are running
       'echo "Verifying LibreChat deployment..." >> /var/log/cloud-init-output.log',
-      'sleep 10',
+      'sleep 30',
       'RETRY_COUNT=0',
-      'while [ $RETRY_COUNT -lt 5 ]; do',
-      '  if curl -f http://localhost:3080/health >/dev/null 2>&1; then',
-      '    echo "LibreChat is running and healthy!" >> /var/log/cloud-init-output.log',
+      'MAX_RETRIES=10',
+      'while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do',
+      '  echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..." >> /var/log/cloud-init-output.log',
+      '  ',
+      '  # Check if containers are running',
+      '  # Determine expected containers based on configuration',
+      ...(props.database.endpoints['documentdb']
+        ? [
+            '  # Using DocumentDB - expect only librechat-api (and optionally rag-api)',
+            '  EXPECTED_PATTERN="librechat-api"',
+          ]
+        : [
+            '  # Using local MongoDB - expect both librechat-api and mongodb',
+            '  EXPECTED_PATTERN="librechat-api|mongodb"',
+          ]),
+      '  RUNNING_CONTAINERS=$(docker ps --format "{{.Names}}" | grep -E "$EXPECTED_PATTERN" | wc -l)',
+      '  echo "Running containers: $RUNNING_CONTAINERS" >> /var/log/cloud-init-output.log',
+      '  ',
+      '  # Try health check',
+      '  if curl -f -s -o /dev/null -w "%{http_code}" http://localhost:3080/health | grep -q "200"; then',
+      '    echo "SUCCESS: LibreChat is running and healthy!" >> /var/log/cloud-init-output.log',
+      '    curl -I http://localhost:3080 >> /var/log/cloud-init-output.log',
       '    break',
       '  else',
-      '    echo "LibreChat not ready yet, retrying in 30 seconds..." >> /var/log/cloud-init-output.log',
-      '    docker ps -a >> /var/log/cloud-init-output.log',
-      '    docker logs librechat-api 2>&1 | tail -20 >> /var/log/cloud-init-output.log || true',
+      '    echo "LibreChat not ready yet (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)" >> /var/log/cloud-init-output.log',
+      '    ',
+      '    # Debug information',
+      '    echo "Container status:" >> /var/log/cloud-init-output.log',
+      '    docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" >> /var/log/cloud-init-output.log',
+      '    ',
+      '    # Check specific container logs if they exist',
+      '    if docker ps -a --format "{{.Names}}" | grep -q "librechat-api"; then',
+      '      echo "LibreChat API recent logs:" >> /var/log/cloud-init-output.log',
+      '      docker logs librechat-api 2>&1 | tail -30 >> /var/log/cloud-init-output.log || true',
+      '    fi',
+      '    ',
+      '    # Restart containers if they are not running after several attempts',
+      '    if [ $RETRY_COUNT -eq 5 ]; then',
+      '      echo "Attempting container restart..." >> /var/log/cloud-init-output.log',
+      '      systemctl restart librechat.service',
+      '      sleep 30',
+      '    fi',
+      '    ',
       '    sleep 30',
       '    RETRY_COUNT=$((RETRY_COUNT + 1))',
       '  fi',
       'done',
+      '',
+      'if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then',
+      '  echo "WARNING: LibreChat health check failed after $MAX_RETRIES attempts" >> /var/log/cloud-init-output.log',
+      '  echo "Final container status:" >> /var/log/cloud-init-output.log',
+      '  docker ps -a >> /var/log/cloud-init-output.log',
+      'fi',
       
       // Clean up - Note: credentials are now only in environment variables
       'unset DB_USER DB_PASSWORD DOCDB_USER DOCDB_PASSWORD JWT_SECRET CREDS_KEY CREDS_IV',

@@ -23,8 +23,6 @@ Welcome to the LibreChat CDK documentation. This guide will help you deploy and 
 - [**Cleanup Guide**](./CLEANUP.md) - Removing deployments and resources
 - [**Cleanup Scripts**](../scripts/README-cleanup.md) - Cleanup script documentation
 
-### Enterprise
-- [**Isengard Token Workarounds**](./ISENGARD_TOKEN_WORKAROUNDS.md) - Enterprise AWS token solutions
 
 ### Development
 - [**Claude.md**](../CLAUDE.md) - Instructions for AI-assisted development
